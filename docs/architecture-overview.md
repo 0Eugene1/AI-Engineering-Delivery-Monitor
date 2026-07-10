@@ -374,29 +374,18 @@ POST /hooks/jenkins
 
 | Файл | Содержание |
 |---|---|
-<<<<<<< HEAD
 | [ai_context.md](./ai_context.md) | Точка входа для AI |
 | [session_log.md](./session_log.md) | Журнал этапов |
 | [vision.md](./vision.md) | Цель и принципы |
-=======
-| [vision.md](./vision.md) | Цель, принципы |
->>>>>>> 48a07f2d2fb95923c83a28ff08044d9a9c5f8691
 | [architecture.md](./architecture.md) | Архитектура (развёрнуто) |
 | [database.md](./database.md) | Схема БД |
 | [api.md](./api.md) | REST-контракт |
 | [integrations.md](./integrations.md) | Jira / GitLab / Jenkins |
 | [ux.md](./ux.md) | Экраны |
 | [roadmap.md](./roadmap.md) | План |
-<<<<<<< HEAD
 | [decisions.md](./decisions.md) / [adr/](./adr/) | ADR |
 | [glossary.md](./glossary.md) | Термины |
 | [changelog.md](./changelog.md) | История |
 | [structure.md](./structure.md) | Структура репо |
 
 Cursor Canvas — только локальный обзор в IDE, **не** source of truth.
-=======
-| [decisions.md](./decisions.md) | ADR |
-| [glossary.md](./glossary.md) | Термины |
-
-Cursor Canvas (локальный обзор в IDE): `architecture-design.canvas.tsx` — не нужен для передачи.
->>>>>>> 48a07f2d2fb95923c83a28ff08044d9a9c5f8691

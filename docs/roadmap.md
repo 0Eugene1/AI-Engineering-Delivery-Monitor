@@ -18,11 +18,7 @@
 |---|---|---|---|
 | **0. Discovery** | 3–5 days | Seed Workstream Types, repo→type map, Jenkins jobs, naming convention, service accounts | Документ маппингов + доступы выданы |
 | **1. Skeleton** | 3–5 days | Spring Boot + PostgreSQL + auth + пустой UI | Deploy на внутренний стенд |
-<<<<<<< HEAD
 | **2. Jira + Board** | ~1 week | Sprint Board + `JIRA_STATUS` / `JIRA_COMMENT` в `activity_events` | Состав board совпадает с Jira sprint |
-=======
-| **2. Jira + Board** | ~1 week | Sprint Board + `JIRA_STATUS` в `activity_events` | Состав board совпадает с Jira sprint |
->>>>>>> 48a07f2d2fb95923c83a28ff08044d9a9c5f8691
 | **3. GitLab + Timeline** | 1.5–2 weeks | Workstreams по Type + Issue Timeline | ≥90% задач спринта с корректным naming имеют события в Timeline |
 | **4. Activity Feed + Risks** | 3–5 days | Лента команды + risk badges на board | Стендап можно вести по Risks/Feed |
 | **5. Jenkins + Release Health** | ~1 week | Builds в timeline + % по каждому Workstream Type | Failed build → risk; Release Health drill-down работает |
