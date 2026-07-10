@@ -98,7 +98,11 @@ Cursor canvas `architecture-design.canvas.tsx` — только локальны
 | People screen in MVP | Боль про задачи и релиз |
 | AI inside monolith | Связывает продукт с вендором LLM |
 
+<<<<<<< HEAD
 См. [decisions.md](./decisions.md) и каталог [adr/](./adr/).
+=======
+См. [decisions.md](./decisions.md).
+>>>>>>> 48a07f2d2fb95923c83a28ff08044d9a9c5f8691
 
 ## Architectural risks
 
@@ -119,6 +123,11 @@ Cursor canvas `architecture-design.canvas.tsx` — только локальны
 - контракты → [api.md](./api.md)
 - источники → [integrations.md](./integrations.md)
 - экраны → [ux.md](./ux.md)
+<<<<<<< HEAD
 - trade-offs → новый файл в [adr/](./adr/) + [decisions.md](./decisions.md)
 - план → [roadmap.md](./roadmap.md)
 - крупный этап → [session_log.md](./session_log.md), [changelog.md](./changelog.md)
+=======
+- trade-offs → [decisions.md](./decisions.md)
+- план → [roadmap.md](./roadmap.md)
+>>>>>>> 48a07f2d2fb95923c83a28ff08044d9a9c5f8691

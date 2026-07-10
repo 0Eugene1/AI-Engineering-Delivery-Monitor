@@ -78,10 +78,17 @@
 
 ## Related docs
 
+<<<<<<< HEAD
 - [ai_context.md](./ai_context.md)
 - [architecture.md](./architecture.md)
 - [architecture-overview.md](./architecture-overview.md)
 - [ux.md](./ux.md)
 - [roadmap.md](./roadmap.md)
 - [decisions.md](./decisions.md) / [adr/](./adr/)
+=======
+- [architecture.md](./architecture.md)
+- [ux.md](./ux.md)
+- [roadmap.md](./roadmap.md)
+- [decisions.md](./decisions.md)
+>>>>>>> 48a07f2d2fb95923c83a28ff08044d9a9c5f8691
 
