@@ -1,0 +1,11 @@
+# CODEOWNERS
+#
+# Раскомментируйте и подставьте GitHub users/teams после настройки remote:
+#
+# *            @your-org/delivery-monitor-leads
+# /docs/       @your-org/delivery-monitor-leads
+# /docs/adr/   @your-org/delivery-monitor-leads
+# /backend/    @your-org/backend-devs
+# /frontend/   @your-org/frontend-devs
+#
+# Пока owners не назначены — review делает technical lead вручную.
