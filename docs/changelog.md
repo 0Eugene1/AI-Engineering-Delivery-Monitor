@@ -14,6 +14,25 @@
 
 ---
 
+## [0.2.0-skeleton] — 2026-07-14
+
+### Added
+
+- Минимальный backend-каркас (`backend/`): Java 21, Spring Boot 3.5.16, Maven (с wrapper `mvnw`/`mvnw.cmd`).
+- PostgreSQL: JDBC-драйвер + Spring Data JPA (без бизнес-сущностей), конфигурация через `application.yml` и env-переменные (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`).
+- Liquibase: master changelog + один baseline changeset (`tagDatabase`), без бизнес-таблиц.
+- Spring Boot Actuator: `/actuator/health`, `/actuator/info` (с build-info).
+- Docker: `backend/Dockerfile` (multi-stage, `eclipse-temurin:21-jre-alpine`), `docker/docker-compose.yml` (postgres + backend), `docker/.env.example`.
+- Пакет `ru.eltc.deliverymonitor.integration.jira` (пустой, только `package-info.java`) — точка старта следующей задачи (Jira integration).
+- Context/Liquibase smoke-тест на embedded H2 (PostgreSQL-режим), без зависимости от Docker.
+
+### Notes
+
+- Jira, GitLab, Jenkins — **не реализованы**; бизнес-сущности (`issues`, `workstreams`, `activity_events`, …) — **не созданы**. Это сознательная граница Phase 1 — Skeleton ([roadmap.md](./roadmap.md)).
+- Архитектура не изменилась относительно принятых ADR — новый ADR не создавался.
+
+---
+
 ## [0.1.0-docs] — 2026-07-10
 
 ### Added

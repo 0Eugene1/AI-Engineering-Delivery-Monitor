@@ -1,0 +1,64 @@
+package ru.eltc.deliverymonitor;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Verifies the Spring context boots on a real HTTP port and
+ * {@code /actuator/health} responds with UP. A real Postgres is not required
+ * for this Skeleton smoke test: Liquibase/JPA point at a throwaway file-based
+ * H2 database in PostgreSQL-compatibility mode, so this runs without Docker
+ * while still exercising the Liquibase wiring end-to-end.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class DeliveryMonitorApplicationTests {
+
+    @LocalServerPort
+    private int port;
+
+    @DynamicPropertySource
+    static void datasourceProperties(DynamicPropertyRegistry registry) {
+        Path dbFile = tempDbFile();
+        registry.add("spring.datasource.url",
+                () -> "jdbc:h2:file:" + dbFile + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE");
+        registry.add("spring.datasource.username", () -> "sa");
+        registry.add("spring.datasource.password", () -> "");
+        registry.add("spring.datasource.driver-class-name", () -> "org.h2.Driver");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
+    }
+
+    private static Path tempDbFile() {
+        try {
+            File dir = Files.createTempDirectory("delivery-monitor-test").toFile();
+            return new File(dir, "testdb").toPath();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
+    void contextLoads() {
+        // If the context fails to start (bad config, broken Liquibase changelog, etc.), this fails.
+    }
+
+    @Test
+    void actuatorHealthReturnsUp() {
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response =
+                restTemplate.getForEntity("http://localhost:" + port + "/actuator/health", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"status\":\"UP\"");
+    }
+}

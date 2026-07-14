@@ -4,10 +4,10 @@
 
 | | |
 |---|---|
-| **Status** | Pre-development — documentation complete (architecture v2.1) |
+| **Status** | Phase 1 — Skeleton (backend scaffold in progress) |
 | **Team** | 9 people: 7 developers + 2 QA |
 | **Concept version** | 2.1 |
-| **App code** | Not started |
+| **App code** | Backend skeleton scaffolded ([backend/](./backend/)); Jira/GitLab/Jenkins integration not started |
 
 ---
 
@@ -66,7 +66,7 @@ Monitor — read-only проекция поверх существующих и�
 
 Детали: [docs/roadmap.md](./docs/roadmap.md).
 
-**Сейчас:** завершить Discovery (маппинги репо, доступы), затем Skeleton.
+**Сейчас:** Discovery завершён; backend-скелет (Phase 1) готов. Следующий шаг — Jira integration (Phase 2).
 
 ---
 
@@ -97,7 +97,7 @@ AI-Engineering-Delivery-Monitor/
    **Не** используйте `C:\Program Files\...`.
 2. Прочитайте [docs/vision.md](./docs/vision.md) и [docs/architecture-overview.md](./docs/architecture-overview.md).
 3. Для AI-сессий откройте [docs/ai_context.md](./docs/ai_context.md).
-4. Код приложения пока не запускается — его ещё нет.
+4. Backend-скелет можно запустить: см. [backend/README.md](./backend/README.md) / [docker/README.md](./docker/README.md). Jira/GitLab/Jenkins integration и бизнес-функциональность — пока нет.
 
 ---
 

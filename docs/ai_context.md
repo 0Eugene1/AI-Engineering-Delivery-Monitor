@@ -4,8 +4,8 @@
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
 | **Version** | 2.1 |
-| **Stage** | Pre-development — documentation & repository bootstrap |
-| **Last updated** | 2026-07-10 |
+| **Stage** | Phase 1 — Skeleton (backend scaffold in progress) |
+| **Last updated** | 2026-07-14 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
 
@@ -33,11 +33,13 @@
 |---|---|
 | Vision / architecture docs | Done (v2.1) |
 | ADR formalization | Done |
-| Repository bootstrap | In progress / Done after this session |
-| Application code (backend/frontend) | **Not started** |
-| Discovery (repo maps, credentials) | Next |
+| Repository bootstrap | Done |
+| Discovery (repo maps, credentials) | Done (см. [discovery.md](./discovery.md); часть `[TODO]` — некритичные, донабираются по ходу) |
+| Backend skeleton (Spring Boot + PostgreSQL + Liquibase + Actuator) | Done — см. [backend/README.md](../backend/README.md) |
+| Frontend | **Not started** |
+| Jira / GitLab / Jenkins integration | **Not started** — следующая задача: Jira ([roadmap.md](./roadmap.md) Phase 2) |
 
-**Сейчас код приложения не пишем**, пока не завершён Discovery и не утверждён старт этапа Skeleton ([roadmap.md](./roadmap.md)).
+Discovery и Skeleton завершены. **Бизнес-код (Jira/GitLab/Jenkins, domain-сущности) пока не пишем**, пока не начат явный этап реализации интеграций ([roadmap.md](./roadmap.md)).
 
 ---
 

@@ -1,0 +1,12 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0001-skeleton-baseline
+      author: delivery-monitor
+      comment: >-
+        Skeleton phase baseline. Confirms Liquibase is wired to PostgreSQL and
+        runs on startup. No business entities yet - see docs/database.md for
+        the planned schema; first real tables arrive with Jira integration
+        (Phase 2 of docs/roadmap.md).
+      changes:
+        - tagDatabase:
+            tag: skeleton-baseline
