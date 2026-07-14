@@ -36,6 +36,10 @@ class DeliveryMonitorApplicationTests {
         registry.add("spring.datasource.password", () -> "");
         registry.add("spring.datasource.driver-class-name", () -> "org.h2.Driver");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
+        // JiraProperties.Auth#token is fail-fast validated (@NotBlank) and empty by default
+        // (no secrets committed). This placeholder is not a real credential — it only lets
+        // the full application context start for this smoke test; no Jira call is made here.
+        registry.add("jira.auth.token", () -> "test-only-placeholder-token");
     }
 
     private static Path tempDbFile() {

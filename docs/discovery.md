@@ -167,9 +167,22 @@ Rank field (порядок карточек): custom field **11350**.
 | `[known]` | Roster `jira_user` команды | Filter 30532 assignee list | §9.1 `team_roster` |
 | `[assumed]` | Monitor MVP polling = filter 30532 | Согласовать с тимлидом | Issue count = карточки на board |
 | `[TODO]` | Доп. фильтр для Release Health (fixVersion swimlane?) | Тимлид | Phase 5 |
-| `[TODO]` | PAT vs basic auth на 8.20.30 | Jira-админ; [Atlassian docs](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) | `GET /rest/api/2/myself` под выданным аккаунтом |
+| `[TODO]` | PAT vs basic auth на 8.20.30 — **сетевая доступность и версия подтверждены** 2026-07-14 (см. «Gate-check» ниже), **сам auth ещё не подтверждён** — нужен реальный токен | Jira-админ; [Atlassian docs](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) | `GET /rest/api/2/myself` под выданным аккаунтом — прогнать `backend/.../jira/JiraSmokeTest.java` с реальным `JIRA_TOKEN` |
 | `[TODO]` | Webhook `issue_updated` — да/нет, URL | Jira-админ (System → WebHooks) | Тестовый POST на endpoint Monitor |
 | `[TODO]` | Rate limits при polling | Jira-админ / нагрузочная политика | Согласовать интервал 2–5 мин |
+
+### Gate-check Phase 2.1 → Phase 2.2 (2026-07-14)
+
+Перед переходом к Phase 2.2 выполнена частичная проверка `JiraClient` (Phase 2.1) против **настоящего** `https://jira.eltc.ru` (не mock) — без реальных credentials (их не было в этой сессии), поэтому это **не** полный smoke-тест из `roadmap.md`, а только его сетевая/протокольная часть:
+
+| Проверка | Результат |
+|---|---|
+| Сетевая доступность (`https://jira.eltc.ru:443`, TLS) | ✅ Доступен из рабочей сети |
+| `GET /rest/api/2/serverInfo` (без auth, публичный) | ✅ `200`, `version: "8.20.30"`, `deploymentType: "Server"`, `serverTitle: "Goodline JIRA"` — подтверждает версию из «Уже известно» |
+| `GET /rest/api/2/myself` без валидных credentials (через реальный `JiraClient`/`WebClient`, тот же код, что в проде) | `401 Unauthorized`, пустое тело — корректно обёрнуто в `JiraClientException` (см. `JiraClientTest#wrapsUnauthorizedResponseWithoutBody`, тот же путь кода отработал и на реальном сервере) |
+| `GET /rest/api/2/search?jql=filter=30532` без валидных credentials | `400 Bad Request`, тело `{"errorMessages":["Фильтр с ID '30532' не существует или у вас нет прав для просмотра его данных."]}` — стандартное generic-сообщение Jira для анонимного/невалидного доступа (не значит, что filter 30532 не существует — Jira намеренно не различает «нет фильтра» и «нет прав» для неавторизованных запросов); тело корректно распарсилось в `JiraErrorResponseDto`/`JiraClientException` |
+
+**Вывод:** транспортный уровень (TLS, таймауты, парсинг реальных Jira-ответов на ошибки) подтверждён на настоящем сервере и совпадает с поведением, которое уже покрыто unit-тестами на mock-сервере — расхождений не найдено. **Открытый TODO** — авторизованный прогон (`PAT` или `Basic`) с реальным сервисным аккаунтом, чтобы подтвердить: (а) какой auth type реально работает на этой инсталляции, (б) что filter 30532 действительно возвращает issues. Для этого добавлен `backend/src/test/java/ru/eltc/deliverymonitor/integration/jira/JiraSmokeTest.java` — отключён по умолчанию (`@EnabledIfEnvironmentVariable(JIRA_TOKEN)`), не входит в обычный `mvnw verify`; инструкция запуска — в Javadoc класса. После первого успешного прогона с реальным токеном — обновить эту секцию и сменить статус строки выше на `[known]`.
 
 ### Почему важно
 

@@ -18,6 +18,111 @@
 
 ---
 
+## 2026-07-14 — Phase 2.1 gate-check + hardening (before Phase 2.2)
+
+**Stage:** Phase 2.1 — Jira REST Client, gate-check перед Phase 2.2 ([roadmap.md](./roadmap.md))
+
+**Summary:**
+После code review Phase 2.1 выполнен ограниченный gate-check и точечное укрепление `integration.jira`, **без** новых sync/persistence/scheduler/domain-сущностей (сознательно вне scope):
+
+1. **Fail-fast валидация `JiraProperties`** — добавлен `spring-boot-starter-validation`; класс помечен `@Validated`, `baseUrl` (`@NotBlank`), `auth` (`@NotNull @Valid`), `auth.token` (`@NotBlank`), `auth.type` (`@NotNull`), и cross-field проверка `@AssertTrue`: при `auth.type=basic` `username` не может быть пустым. Теперь отсутствующий/пустой `JIRA_TOKEN` **не даёт приложению запуститься** (раньше это всплыло бы только при первом реальном вызове Jira). Тесты (`JiraPropertiesTest`, `JiraClientConfigTest`) проверяют и валидные, и невалидные конфигурации — `ApplicationContextRunner` + `assertThat(context).hasFailed()`. Побочный эффект: `DeliveryMonitorApplicationTests` (полный контекст) и часть существующих тестов теперь явно передают тестовый (не секретный) `jira.auth.token`, иначе они тоже не стартуют — это осознанное и ожидаемое поведение fail-fast.
+2. **Единый тип ошибки в `JiraClient`** — все ошибки взаимодействия с Jira (HTTP-статус **и** транспортные: timeout, connection refused, DNS failure, прочие network errors) теперь оборачиваются в `JiraClientException`; публичный API `JiraClient` (`getMyself/search/searchByFilter`) не изменился. Добавлен `JiraClientException.NO_HTTP_STATUS = 0` — sentinel-статус для случаев без HTTP-ответа. Тесты: connection refused / DNS / generic network error через синтетический `ExchangeFunction` (детерминированно, без реальной сети), response timeout — через реальный `MockWebServer` с очень коротким таймаутом (без ответа).
+3. **`ExchangeStrategies` на `jiraWebClient`** — `maxInMemorySize` увеличен с дефолтных Spring 256 KB до **10 MB** (внутренний Jira Server с известным, ограниченным объёмом данных — не публичный multi-tenant API; запас на будущее расширение полей типа `changelog`/`links`). Обоснование — в комментарии кода. Тест на `JiraClientConfigTest` гоняет через `MockWebServer` тело ответа ~400 KB (больше дефолтного лимита, меньше нового) и проверяет успешный парсинг.
+4. **Временный `JiraSmokeTest`** (`backend/src/test/java/.../integration/jira/JiraSmokeTest.java`) — не входит в обычный `mvnw verify` (`@EnabledIfEnvironmentVariable(JIRA_TOKEN)`, по умолчанию skipped), гоняет **тот же** production-код (`JiraClientConfig`/`JiraClient`), конфиг — из env vars, против настоящего `https://jira.eltc.ru`. Реальных credentials в этой сессии не было — авторизованный прогон (`myself`/`search filter=30532` с валидным токеном) остаётся `[TODO]`.
+5. **Частичный gate-check без credentials** (см. `docs/discovery.md` §1 «Gate-check Phase 2.1 → Phase 2.2»): сетевая доступность `jira.eltc.ru` подтверждена, `GET /rest/api/2/serverInfo` (публичный, без auth) подтвердил версию **8.20.30**; `GET /rest/api/2/myself` без валидных credentials (через настоящий `JiraClient`) вернул `401` без тела, `GET /rest/api/2/search?jql=filter=30532` — `400` со стандартным Jira-сообщением о недостатке прав/несуществующем фильтре для анонимного доступа. Оба ответа корректно обернулись в `JiraClientException` тем же кодом, что уже покрыт unit-тестами на mock-сервере — расхождений с реальным сервером не найдено. Открытый `TODO`: авторизованный прогон с реальным PAT/Basic токеном от Jira-админа.
+
+Все backend-тесты зелёные: `.\mvnw.cmd clean verify` (JDK 21 через Android Studio JBR — системный JDK в этой среде 17).
+
+**Decisions:**
+
+- Валидация — только на `baseUrl` и `auth` (как явно запрошено), без расширения на остальные поля (`connectTimeout`, `projectKeys`, …) — не входило в scope этой задачи.
+- `JiraClientException.NO_HTTP_STATUS = 0` как единый sentinel вместо отдельного under/over-типа ошибки — сохраняет «один тип ошибки» контракт, который важен для будущей Phase 2.2 (`{ fetched, saved, errors: [] }`).
+- `maxInMemorySize = 10 MB` — фиксированное значение, не конфигурируемое через `application.yml`, т.к. это внутренний технический лимит клиента, а не операционная настройка команды.
+- `JiraSmokeTest` оставлен как файл в репозитории (не удалён после прогона) — отключён по умолчанию, готов к использованию, когда появится реальный `JIRA_TOKEN`; решение об удалении — за командой после того, как gate-check будет пройден с реальными credentials.
+- Архитектура не менялась; новый ADR не создавался (все правки — в рамках уже принятых ADR-003/007).
+
+**Docs touched:**
+
+- `docs/discovery.md` (§1 — статус "PAT vs basic auth", новая секция "Gate-check Phase 2.1 → Phase 2.2")
+- `docs/session_log.md` (this entry)
+
+**Code touched (new):**
+
+- `backend/src/test/java/ru/eltc/deliverymonitor/integration/jira/JiraSmokeTest.java`
+
+**Code touched (modified):**
+
+- `backend/pom.xml` (+ `spring-boot-starter-validation`)
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/config/JiraProperties.java` (`@Validated` + Bean Validation)
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/config/JiraClientConfig.java` (`ExchangeStrategies`/`maxInMemorySize`)
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/client/JiraClient.java` (унификация transport-level ошибок)
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/exception/JiraClientException.java` (`NO_HTTP_STATUS`)
+- `backend/src/test/java/ru/eltc/deliverymonitor/integration/jira/client/JiraClientTest.java`, `.../config/JiraClientConfigTest.java`, `.../config/JiraPropertiesTest.java`
+- `backend/src/test/java/ru/eltc/deliverymonitor/DeliveryMonitorApplicationTests.java` (placeholder `jira.auth.token` для полного контекста)
+
+**Next:**
+
+1. Получить реальный `JIRA_TOKEN` (PAT или Basic) от Jira-админа и прогнать `JiraSmokeTest` — закрыть `[TODO]` "PAT vs basic auth" в `docs/discovery.md` §1.
+2. Только после этого — Phase 2.2 (Jira Sync, `POST /api/admin/sync/jira`) по [roadmap.md](./roadmap.md).
+3. Не начинать 2.2 без явного go-ahead.
+
+---
+
+## 2026-07-14 — Phase 2.1 (Jira Client) done: Jira REST client + auth
+
+**Stage:** Phase 2.1 — Jira REST Client ([roadmap.md](./roadmap.md))
+
+**Summary:**
+Реализован **только** HTTP-клиент Jira Server 8.x поверх Spring `WebClient` — без sync, без БД, без REST API, без scheduler, без GitLab/Jenkins (по явному scope задачи). Новый пакет `ru.eltc.deliverymonitor.integration.jira`:
+
+- `config/JiraProperties` — `@ConfigurationProperties(prefix = "jira")`: `baseUrl`, `connectTimeout`, `responseTimeout`, `projectKeys`, `defaultFilterId`, `auth.{type,username,token}`. Значения — из `application.yml` с env-переопределением (`JIRA_BASE_URL`, `JIRA_AUTH_TYPE`, `JIRA_USERNAME`, `JIRA_TOKEN`, …); секреты по умолчанию пустые, в Git не попадают.
+- `config/JiraClientConfig` — бин `WebClient` (base URL + timeouts из properties, `Accept: application/json`) и бин `JiraAuthenticationStrategy`, выбираемый по `jira.auth.type`.
+- `auth/JiraAuthenticationStrategy` (+ `BasicAuthenticationStrategy`, `BearerTokenAuthenticationStrategy`) — Basic auth или PAT (`Authorization: Bearer`); выбор auth-схемы на Jira Server 8.20.30 остаётся `[TODO]` в discovery.md, поэтому обе реализованы и переключаются конфигом.
+- `client/JiraClient` — `getMyself()` (smoke `/rest/api/2/myself`), `search(jql, startAt, maxResults, fields)` и `searchByFilter(filterId, startAt, maxResults)` (`/rest/api/2/search`); ошибки → `JiraClientException` (HTTP-статус + `errorMessages` из тела ответа Jira).
+- `dto/*` — record-DTO для ответов Jira REST API v2: `JiraMyselfDto`, `JiraSearchResultDto`, `JiraIssueDto`, `JiraIssueFieldsDto` (summary/status/assignee/fixVersions/labels), `JiraUserDto`, `JiraStatusDto` (+ `StatusCategory`), `JiraIssueTypeDto`, `JiraFixVersionDto`, `JiraErrorResponseDto`.
+- `exception/JiraClientException`.
+
+`pom.xml`: добавлен `spring-boot-starter-webflux` (только ради `WebClient`; т.к. `spring-boot-starter-web` уже на classpath, Spring Boot оставляет Servlet/MVC стек, реактивный сервер не включается) и тестовая зависимость `com.squareup.okhttp3:mockwebserver3-junit5:5.4.0`.
+
+Тесты (12, все зелёные, `mvnw clean verify`): auth-стратегии (Basic/Bearer заголовки), биндинг `JiraProperties` (дефолты + override через properties/env-стиль ключей), выбор auth-стратегии в `JiraClientConfig` (`ApplicationContextRunner`), и `JiraClientTest` — полный цикл через mock HTTP-сервер (`mockwebserver3`): успешный `getMyself`/`search`/`searchByFilter` с парсингом DTO, проверка заголовка `Authorization`, и обработка ошибочных ответов (400 с телом, 401 без тела) → `JiraClientException`.
+
+**Decisions:**
+
+- `WebClient` вместо `RestTemplate` (сохраняет опцию неблокирующих вызовов позже; поддержана обоими вариантами roadmap — "RestTemplate / WebClient").
+- Auth реализован как стратегия (Basic vs Bearer/PAT), переключаемая конфигом `jira.auth.type`, а не захардкожена — т.к. discovery.md §1 явно оставляет "PAT vs basic auth on 8.20.30" открытым `[TODO]`.
+- DTO — Java records с `@JsonIgnoreProperties(ignoreUnknown = true)`: неизвестные поля Jira не ломают парсинг; включены только поля, реально нужные текущему и следующему шагу (summary/status/assignee/fixVersions/labels), без "на всякий случай" полей.
+- Тестирование HTTP-слоя — через `mockwebserver3` (mock-сервер), не мокирование `WebClient` — тест реально проверяет сериализацию URL/заголовков/JSON.
+- Единый метод `search(jql, ...)` + удобный `searchByFilter(filterId, ...)`, но **без** привязки к конкретному filter 30532/board 718 в коде клиента — эта логика (Phase 2.2/2.3) намеренно не добавлена.
+- Явно не сделано (по scope задачи): sync-оркестрация, `POST /api/admin/sync/jira`, персистентность в PostgreSQL, `GET /api/issues`, `@Scheduled` поллинг, GitLab/Jenkins.
+
+**Docs touched:**
+
+- `docs/ai_context.md` (стадия/версия), `docs/session_log.md` (this entry), `docs/changelog.md`
+- `backend/README.md` (секция "Jira REST client (Phase 2.1)", package layout, env vars)
+
+**Code touched (new):**
+
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/config/{JiraProperties,JiraClientConfig}.java`
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/auth/{JiraAuthenticationStrategy,BasicAuthenticationStrategy,BearerTokenAuthenticationStrategy}.java`
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/client/JiraClient.java`
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/dto/*.java` (9 DTO)
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/exception/JiraClientException.java`
+- `backend/src/test/java/ru/eltc/deliverymonitor/integration/jira/**` (auth/config/client tests)
+- `backend/src/main/resources/application.yml` (секция `jira:`)
+- `backend/pom.xml` (`spring-boot-starter-webflux`, `mockwebserver3-junit5`)
+
+**Code touched (modified):**
+
+- `backend/src/main/java/ru/eltc/deliverymonitor/integration/jira/package-info.java` (обновлён статус пакета)
+
+**Next:**
+
+1. Phase 2.2 — Jira Sync: `POST /api/admin/sync/jira` (ручной), использующий `JiraClient.searchByFilter` для board 718 / filter 30532; получение контекста board (2.3) и задач (2.4) по [roadmap.md](./roadmap.md).
+2. Не переходить к 2.2 без явного go-ahead (по просьбе в этой сессии — остановиться после 2.1).
+3. Когда появятся реальные Jira credentials — прогнать `getMyself()` вручную (`curl`/small script) для подтверждения `[TODO]` "PAT vs basic auth" в discovery.md §1, затем зафиксировать выбор в `jira.auth.type` по умолчанию.
+
+---
+
 ## 2026-07-14 — Phase 1 (Skeleton) started: backend scaffold
 
 **Stage:** Phase 1 — Skeleton ([roadmap.md](./roadmap.md))

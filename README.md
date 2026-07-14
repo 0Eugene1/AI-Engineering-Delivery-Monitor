@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | Phase 1 — Skeleton (backend scaffold in progress) |
+| **Status** | Phase 2.1 — Jira Client (next) |
 | **Team** | 9 people: 7 developers + 2 QA |
 | **Concept version** | 2.1 |
 | **App code** | Backend skeleton scaffolded ([backend/](./backend/)); Jira/GitLab/Jenkins integration not started |
@@ -62,11 +62,11 @@ Monitor — read-only проекция поверх существующих и�
 
 ## Roadmap (short)
 
-0. Discovery → 1. Skeleton → 2. Jira Board → 3. GitLab + Timeline → 4. Feed + Risks → 5. Jenkins + Release Health → 6. Pilot → 7. AI Summary  
+0. Discovery → 1. Skeleton → **2.1–2.5 Jira** (Client → Sync → DB → API → Scheduler) → 3. GitLab + Timeline → 4. Feed + Risks → 5. CI + Release Health → 6. Pilot → 7. AI Summary  
 
 Детали: [docs/roadmap.md](./docs/roadmap.md).
 
-**Сейчас:** Discovery завершён; backend-скелет (Phase 1) готов. Следующий шаг — Jira integration (Phase 2).
+**Сейчас:** Skeleton готов. Следующий шаг — **Phase 2.1** Jira Client ([roadmap.md](./docs/roadmap.md)).
 
 ---
 

@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
-| **Version** | 2.1 |
-| **Stage** | Phase 1 — Skeleton (backend scaffold in progress) |
+| **Version** | 2.3 |
+| **Stage** | Phase 2.1 — Jira Client: done (client + auth only); Phase 2.2 (Jira Sync) — next |
 | **Last updated** | 2026-07-14 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
@@ -37,7 +37,8 @@
 | Discovery (repo maps, credentials) | Done (см. [discovery.md](./discovery.md); часть `[TODO]` — некритичные, донабираются по ходу) |
 | Backend skeleton (Spring Boot + PostgreSQL + Liquibase + Actuator) | Done — см. [backend/README.md](../backend/README.md) |
 | Frontend | **Not started** |
-| Jira / GitLab / Jenkins integration | **Not started** — следующая задача: Jira ([roadmap.md](./roadmap.md) Phase 2) |
+| Jira REST Client + auth (Phase 2.1) | Done — `integration.jira` (`config`/`auth`/`client`/`dto`/`exception`), Spring `WebClient`, Basic/Bearer(PAT) auth. См. [backend/README.md](../backend/README.md#jira-rest-client-phase-21) |
+| Jira Sync / Persistence / REST API / Scheduler | **Next** — Phase 2.2→2.5 по [roadmap.md](./roadmap.md): Sync (`POST /api/admin/sync/jira`) → Persistence → REST API → scheduler (Phase 2.5) |
 
 Discovery и Skeleton завершены. **Бизнес-код (Jira/GitLab/Jenkins, domain-сущности) пока не пишем**, пока не начат явный этап реализации интеграций ([roadmap.md](./roadmap.md)).
 

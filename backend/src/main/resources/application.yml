@@ -22,6 +22,22 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+# Jira REST client (Phase 2.1, docs/discovery.md §9.1). No sync/scheduler/persistence yet —
+# only the HTTP client + auth wiring. Secrets come from env, never committed.
+jira:
+  base-url: ${JIRA_BASE_URL:https://jira.eltc.ru}
+  connect-timeout: ${JIRA_CONNECT_TIMEOUT:5s}
+  response-timeout: ${JIRA_RESPONSE_TIMEOUT:10s}
+  project-keys: ${JIRA_PROJECT_KEYS:MPTPSUPP}
+  default-filter-id: ${JIRA_DEFAULT_FILTER_ID:30532}
+  auth:
+    # bearer = Personal Access Token (Authorization: Bearer ...), recommended for Jira Server 8.14+.
+    # basic  = HTTP Basic (username + password/PAT). Confirm which one the service account uses
+    # (docs/discovery.md §1 "PAT vs basic auth on 8.20.30" is still TODO).
+    type: ${JIRA_AUTH_TYPE:bearer}
+    username: ${JIRA_USERNAME:}
+    token: ${JIRA_TOKEN:}
+
 management:
   endpoints:
     web:

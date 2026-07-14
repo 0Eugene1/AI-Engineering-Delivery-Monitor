@@ -19,6 +19,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <mockwebserver.version>5.4.0</mockwebserver.version>
     </properties>
 
     <dependencies>
@@ -30,6 +31,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Bean Validation (JSR-380) for @ConfigurationProperties fail-fast checks, e.g. JiraProperties -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
         <!-- Persistence: PostgreSQL + JPA (no entities yet, wiring only) -->
@@ -49,6 +56,18 @@
             <artifactId>liquibase-core</artifactId>
         </dependency>
 
+        <!--
+            WebClient for outbound HTTP integrations (Jira, later GitLab/Jenkins).
+            Adding this alongside spring-boot-starter-web does NOT switch the app to the
+            reactive (WebFlux) server — Spring Boot keeps the Servlet/MVC stack because
+            spring-boot-starter-web is also on the classpath. This only brings in the
+            WebClient client-side API + Reactor Netty HTTP client.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -58,6 +77,13 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Mock HTTP server for Jira WebClient unit tests (no real Jira needed) -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver3-junit5</artifactId>
+            <version>${mockwebserver.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

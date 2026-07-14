@@ -3,27 +3,96 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.1 |
-| **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md) |
+| **Version** | 2.2 |
+| **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md), [discovery.md](./discovery.md) |
 
 ## Guiding rule
 
-Каждый этап даёт проверяемый результат для команды, а не «инфраструктуру ради инфраструктуры».
+Каждый этап даёт **проверяемый результат**, а не «инфраструктуру ради инфраструктуры».
 
 **Первая ценность — этап 3** (GitLab + Issue Timeline).
 
-## Phases
+**Правило Jira (Phase 2):** сначала **ручной sync** (`POST /api/admin/sync/jira`), потом scheduler. Не начинать с фонового polling.
+
+---
+
+## Phases (overview)
 
 | Phase | Duration | Deliverable | Done when |
 |---|---|---|---|
-| **0. Discovery** | 3–5 days | Seed Workstream Types, repo→type map, Jenkins jobs, naming convention, service accounts | Документ маппингов + доступы выданы |
-| **1. Skeleton** | 3–5 days | Spring Boot + PostgreSQL + auth + пустой UI | Deploy на внутренний стенд |
-| **2. Jira + Board** | ~1 week | Sprint Board + `JIRA_STATUS` / `JIRA_COMMENT` в `activity_events` | Состав board совпадает с Jira sprint |
-| **3. GitLab + Timeline** | 1.5–2 weeks | Workstreams по Type + Issue Timeline | ≥90% задач спринта с корректным naming имеют события в Timeline |
-| **4. Activity Feed + Risks** | 3–5 days | Лента команды + risk badges на board | Стендап можно вести по Risks/Feed |
-| **5. Jenkins + Release Health** | ~1 week | Builds в timeline + % по каждому Workstream Type | Failed build → risk; Release Health drill-down работает |
+| **0. Discovery** | 3–5 days | Seed Workstream Types, repo→type map, Jenkins jobs, naming, service accounts | Документ маппингов + доступы (критичные) |
+| **1. Skeleton** | 3–5 days | Spring Boot + PostgreSQL + Actuator | `docker compose up`, `/actuator/health` OK |
+| **2.1 Jira Client** | 1–2 days | REST-клиент + auth к Jira | Smoke: `/rest/api/2/myself`, JQL search |
+| **2.2 Jira Sync** | 1–2 days | Оркестрация выгрузки (board/filter) | `POST /api/admin/sync/jira` → данные получены |
+| **2.3 Persistence** | 2–3 days | Liquibase + сохранение в PostgreSQL | После sync данные в БД |
+| **2.4 REST API** | 1–2 days | Read API для UI | `GET /api/issues`, `GET /api/sprints/current` |
+| **2.5 Jira Scheduler** *(после 2.4)* | 1 day | Polling 2–5 min | Фоновый sync без ручного POST |
+| **3. GitLab + Timeline** | 1.5–2 weeks | Workstreams + Issue Timeline | ≥90% задач с naming → события в Timeline |
+| **4. Activity Feed + Risks** | 3–5 days | Лента + risk badges | Стендап по Risks/Feed |
+| **5. Jenkins / CI + Release Health** | ~1 week | Builds + % по Workstream Type | Failed build → risk |
 | **6. Pilot** | 2 sprints | Shadow mode рядом с Jira | Нет обязательного ручного ввода |
-| **7. AI Summary** | after MVP | Отдельный сервис, кнопка Summarize | Summary строится только из REST Monitor |
+| **7. AI Summary** | after MVP | Отдельный сервис | Summary только из REST Monitor |
+
+```text
+Phase 1 Skeleton
+       ↓
+Phase 2.1 Jira Client      ← только HTTP-клиент + credentials
+       ↓
+Phase 2.2 Jira Sync        ← POST /api/admin/sync/jira (ручной!)
+       ↓
+Phase 2.3 Persistence      ← PostgreSQL
+       ↓
+Phase 2.4 REST API         ← GET /api/issues
+       ↓
+Phase 2.5 Scheduler        ← polling (после того как ручной sync стабилен)
+       ↓
+Phase 3 GitLab + Timeline
+```
+
+---
+
+## Phase 2 — детализация (контролируемые задачи)
+
+> Конфиг Jira: [discovery.md](./discovery.md) §9.1 — board **718** (Kanban), filter **30532**, project **MPTPSUPP**.
+
+| Task | Scope | **Не делать** на этом шаге | Done when |
+|---|---|---|---|
+| **2.1 Jira REST Client** | HTTP-клиент Jira Server 8.x (`RestTemplate` / `WebClient`), DTO ответов, обработка ошибок | Auth wiring, БД, REST API, scheduler | Unit/integration test: mock Jira отвечает |
+| **2.2 Auth** | Конфиг credentials (env), basic auth / PAT; smoke `GET /rest/api/2/myself` | Sync, persistence, публичный API | Реальный Jira token из env → `/myself` 200 |
+| **2.3 Получение контекста board** | Board 718 / filter 30532: активные sprints **если есть**, board configuration | Сохранение в БД, GET /issues | JQL filter 30532 выполняется, issues возвращаются |
+| **2.4 Получение задач** | Search по JQL filter 30532; поля: key, summary, status, assignee, fixVersion | PostgreSQL, scheduler | Список issues совпадает с filter view в Jira |
+| **2.5 Persistence** | Liquibase: `sprints`, `issues`, `sync_state`; upsert после sync | Scheduler, UI | После `POST …/sync/jira` строки в БД |
+| **2.6 REST API** | `GET /api/issues`, `GET /api/sprints/current` (из БД, не live Jira) | Scheduler, Board UI | curl → JSON из PostgreSQL |
+| **2.7 Scheduler** *(отложено)* | `@Scheduled` polling 2–5 min | — | Только после стабильного ручного sync |
+
+### Маппинг Task → Phase
+
+| Phase | Включает tasks |
+|---|---|
+| **2.1 Jira Client** | 2.1 + 2.2 |
+| **2.2 Jira Sync** | 2.3 + 2.4 + endpoint `POST /api/admin/sync/jira` |
+| **2.3 Persistence** | 2.5 |
+| **2.4 REST API** | 2.6 |
+| **2.5 Scheduler** | 2.7 |
+
+### Принцип: manual sync first
+
+```text
+POST /api/admin/sync/jira
+  → клиент ходит в Jira
+  → получает issues (filter 30532)
+  → сохраняет в PostgreSQL
+  → возвращает { fetched, saved, errors }
+
+GET /api/issues
+  → читает только из PostgreSQL
+```
+
+Scheduler добавляется **только когда** ручной sync проверен на стенде с реальным token.
+
+Контракт admin endpoint: [api.md](./api.md).
+
+---
 
 ## MVP scope (screens)
 
@@ -55,4 +124,6 @@ Out of MVP:
 
 ## Tracking changes
 
-При сдвиге приоритетов или scope обновляйте этот файл и при необходимости [vision.md](./vision.md) / [ux.md](./ux.md).
+При сдвиге приоритетов или scope обновляйте этот файл и при необходимости [vision.md](./vision.md) / [ux.md](./ux.md) / [api.md](./api.md).
+
+**v2.2 (2026-07-14):** Phase 2 разбита на 2.1–2.5; manual sync перед scheduler.

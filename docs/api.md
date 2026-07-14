@@ -39,11 +39,48 @@ GET /api/sprints/{id}/board
 ### Issues
 
 ```
+GET /api/issues
 GET /api/issues/{key}
 GET /api/issues/{key}/timeline
 ```
 
+`GET /api/issues` — список issues **из PostgreSQL** (после sync), не live-запрос в Jira.
+
 `timeline` — упорядоченный список `activity_events` по issue (главный UX).
+
+### Admin sync (Phase 2.2 — до scheduler)
+
+```
+POST /api/admin/sync/jira
+```
+
+**Ручной** запуск синхронизации Jira → PostgreSQL. Scheduler **не** используется на Phase 2.2–2.4.
+
+Request body (optional):
+
+```json
+{
+  "filterId": 30532
+}
+```
+
+Defaults из конфига / [discovery.md](./discovery.md) §9.1.
+
+Response (sketch):
+
+```json
+{
+  "startedAt": "2026-07-14T10:00:00Z",
+  "finishedAt": "2026-07-14T10:00:03Z",
+  "fetched": 142,
+  "saved": 142,
+  "errors": []
+}
+```
+
+Защита: admin-only (auth TBD на Skeleton; минимум — не публичный без auth на prod).
+
+**Порядок внедрения:** сначала этот endpoint работает end-to-end, затем `GET /api/issues`, затем `@Scheduled` polling ([roadmap.md](./roadmap.md) Phase 2.5).
 
 ### Activity feed
 

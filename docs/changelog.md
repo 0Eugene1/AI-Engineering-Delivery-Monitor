@@ -8,9 +8,14 @@
 
 ## [Unreleased]
 
-### Documentation
+### Added
 
-- (пусто — готовьте записи сюда до релиза/тега)
+- Jira REST-клиент (Phase 2.1, [roadmap.md](./roadmap.md)): `ru.eltc.deliverymonitor.integration.jira` на Spring `WebClient` — конфигурация (`JiraProperties`, `jira.*` в `application.yml` + env), аутентификация (Basic / Bearer PAT, переключаемая `jira.auth.type`), DTO ответов Jira REST API v2 (`myself`, `search`, issue fields: summary/status/assignee/fixVersions/labels), `JiraClient` (`getMyself`, `search`, `searchByFilter`) и `JiraClientException` для ошибок API. Юнит-тесты — на mock HTTP-сервере (`mockwebserver3`), без реального Jira.
+- `spring-boot-starter-webflux` в `backend/pom.xml` — только ради `WebClient`; Servlet/MVC стек остаётся основным.
+
+### Notes
+
+- Sync-оркестрация (`POST /api/admin/sync/jira`), сохранение в PostgreSQL, `GET /api/issues` и `@Scheduled` polling — **не реализованы**; это Phase 2.2–2.5. GitLab/Jenkins — не начаты.
 
 ---
 
