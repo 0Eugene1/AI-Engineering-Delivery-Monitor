@@ -43,7 +43,7 @@
 | Persistence (Phase 2.3) | Done — пакет `domain.issue`: `IssueEntity`/`IssueRepository`/`IssuePersistencePort`/`IssueUpsertCommand`/`IssueUpsertOutcome`/`IssueUpsertService`, Liquibase `0002-issues.yaml` (`issues`/`issue_fix_versions`/`issue_labels`). Upsert постранично, matching по `jiraId`. `sprints`/`sync_state` не созданы (отложены). **Без** REST endpoint/scheduler/security/incremental sync. См. [session_log.md](./session_log.md) |
 | REST API / Scheduler | **Next** — Phase 2.4→2.5 по [roadmap.md](./roadmap.md): REST API (`POST /api/admin/sync/jira`, `GET /api/issues`) → scheduler (Phase 2.5) |
 
-Discovery и Skeleton завершены. **Бизнес-код (Jira/GitLab/Jenkins, domain-сущности) пока не пишем**, пока не начат явный этап реализации интеграций ([roadmap.md](./roadmap.md)).
+Discovery и Skeleton завершены. **Jira integration + sync + issue persistence реализованы** (Phase 2.1–2.3). Следующий явный этап — Phase 2.4 REST API + security baseline; GitLab/Jenkins и frontend — не начаты. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
 
 ---
 
@@ -105,7 +105,7 @@ Seed Workstream Types текущей команды (данные): `backend`, `
 
 ## 7. Что запрещено делать AI
 
-- Писать код приложения до утверждения старта реализации.
+- Перескакивать этапы [roadmap.md](./roadmap.md) или писать код вне текущей фазы без явного go-ahead.
 - Усложнять архитектуру (CQRS, Kafka, Redis, GraphQL, микросервисы) без нового Accepted ADR.
 - Хардкодить платформы (Backend/Android/…) вместо Workstream Type.
 - Использовать Canvas / чат как source of truth вместо `docs/`.

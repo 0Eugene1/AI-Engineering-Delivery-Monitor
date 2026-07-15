@@ -39,9 +39,9 @@ AI-Engineering-Delivery-Monitor/
 │   ├── session_log.md    # Журнал крупных этапов
 │   ├── changelog.md      # Человеческая история изменений
 │   └── …                 # vision, architecture, api, …
-├── backend/              # Spring Boot application (пусто до Skeleton)
-├── frontend/             # React dashboard (пусто до Skeleton)
-├── docker/               # docker-compose, Dockerfiles (когда появятся)
+├── backend/              # Spring Boot — Jira integration, sync, domain.issue
+├── frontend/             # React dashboard (not started)
+├── docker/               # docker-compose, local Postgres
 ├── scripts/              # Вспомогательные скрипты (migrate, seed, sync helpers)
 ├── .github/              # Issue/PR templates; workflows позже
 ├── README.md             # Главная страница репозитория
@@ -68,7 +68,7 @@ AI-Engineering-Delivery-Monitor/
 |---|---|
 | GitHub Project / Milestones via API | Нужен `gh` + org access; завести вручную на GitHub при желании |
 | Heavy CODEOWNERS | Команда ещё не зафиксировала owners в GitHub handles |
-| CI workflows | Нет кода для сборки |
+| CI workflows | Workflows ещё не настроены (код backend собирается через `mvnw verify`) |
 | Open-source LICENSE | Внутренний продукт |
 
 Можно добавить позже без ломки структуры.

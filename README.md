@@ -4,10 +4,11 @@
 
 | | |
 |---|---|
-| **Status** | Phase 2.1 — Jira Client (next) |
+| **Status** | Phase 2.4 — REST API (next) |
+| **Done** | 2.1 Jira Client · 2.2 Jira Sync · 2.3 Persistence |
 | **Team** | 9 people: 7 developers + 2 QA |
-| **Concept version** | 2.1 |
-| **App code** | Backend skeleton scaffolded ([backend/](./backend/)); Jira/GitLab/Jenkins integration not started |
+| **Concept version** | 2.5 |
+| **App code** | Backend: Jira client + board provider + sync + DB upsert ([backend/](./backend/)); no REST API / scheduler / Spring Security / frontend / GitLab / Jenkins yet |
 
 ---
 
@@ -49,6 +50,7 @@ Monitor — read-only проекция поверх существующих и�
 | [docs/database.md](./docs/database.md) | Схема данных |
 | [docs/api.md](./docs/api.md) | REST |
 | [docs/integrations.md](./docs/integrations.md) | Jira / GitLab / Jenkins |
+| [docs/security.md](./docs/security.md) | Безопасность: auth, secrets, network |
 | [docs/ux.md](./docs/ux.md) | Экраны |
 | [docs/decisions.md](./docs/decisions.md) | Индекс ADR |
 | [docs/adr/](./docs/adr/) | Architecture Decision Records |
@@ -66,7 +68,7 @@ Monitor — read-only проекция поверх существующих и�
 
 Детали: [docs/roadmap.md](./docs/roadmap.md).
 
-**Сейчас:** Skeleton готов. Следующий шаг — **Phase 2.1** Jira Client ([roadmap.md](./docs/roadmap.md)).
+**Сейчас:** Phase 2.1–2.3 завершены (Jira client, sync orchestration, PostgreSQL persistence). Следующий шаг — **Phase 2.4** REST API (`POST /api/admin/sync/jira`, `GET /api/issues`) и минимальный Spring Security baseline ([ADR-012](./docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)).
 
 ---
 
@@ -75,10 +77,10 @@ Monitor — read-only проекция поверх существующих и�
 ```text
 AI-Engineering-Delivery-Monitor/
 ├── docs/                 # Source of Truth (Markdown + ADR)
-├── backend/              # Spring Boot (empty until Skeleton)
-├── frontend/             # React UI (empty until Skeleton)
-├── docker/               # Compose / local infra later
-├── scripts/              # Dev/ops helpers later
+├── backend/              # Spring Boot — Jira integration, sync, domain.issue
+├── frontend/             # React UI (not started)
+├── docker/               # Compose / local Postgres
+├── scripts/              # Dev/ops helpers
 ├── .github/              # Issue & PR templates
 ├── README.md
 ├── CONTRIBUTING_AI.md
@@ -97,7 +99,7 @@ AI-Engineering-Delivery-Monitor/
    **Не** используйте `C:\Program Files\...`.
 2. Прочитайте [docs/vision.md](./docs/vision.md) и [docs/architecture-overview.md](./docs/architecture-overview.md).
 3. Для AI-сессий откройте [docs/ai_context.md](./docs/ai_context.md).
-4. Backend-скелет можно запустить: см. [backend/README.md](./backend/README.md) / [docker/README.md](./docker/README.md). Jira/GitLab/Jenkins integration и бизнес-функциональность — пока нет.
+4. Backend можно запустить локально: см. [backend/README.md](./backend/README.md) / [docker/README.md](./docker/README.md). Для офлайн-разработки без Jira-токена — профиль `jira-mock`. REST API, scheduler, frontend, GitLab и Jenkins — ещё не реализованы.
 
 ---
 
@@ -106,7 +108,7 @@ AI-Engineering-Delivery-Monitor/
 1. Read [docs/ai_context.md](./docs/ai_context.md).
 2. Read [docs/session_log.md](./docs/session_log.md).
 3. Follow [CONTRIBUTING_AI.md](./CONTRIBUTING_AI.md).
-4. Do **not** write application code until implementation stage is explicitly started.
+4. Follow [docs/roadmap.md](./docs/roadmap.md); do not skip ahead without explicit approval.
 
 ---
 
