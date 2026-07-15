@@ -1,0 +1,108 @@
+{
+  "_comment": "DEMO / SANITIZED SAMPLE DATA — NOT real Jira content. Used only when jira.mode=mock (offline development). Assignees are fake demo users; summaries are placeholders. Shape mirrors GET /rest/api/2/search for board 718 / filter 30532 (docs/discovery.md §9.1). Never used in production. Unknown fields (like this one) are ignored by the DTO.",
+  "startAt": 0,
+  "maxResults": 50,
+  "total": 5,
+  "issues": [
+    {
+      "id": "900001",
+      "key": "MPTPSUPP-90001",
+      "self": "https://jira.example.invalid/rest/api/2/issue/900001",
+      "fields": {
+        "summary": "[DEMO] Sample task in progress",
+        "status": {
+          "id": "10553",
+          "name": "В работе",
+          "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" }
+        },
+        "assignee": { "name": "demo.user1", "key": "demo.user1", "displayName": "Demo User One", "active": true },
+        "reporter": { "name": "demo.user2", "key": "demo.user2", "displayName": "Demo User Two", "active": true },
+        "issuetype": { "id": "3", "name": "Task", "subtask": false },
+        "fixVersions": [ { "id": "10001", "name": "MP 5.8.0 (demo)", "released": false, "archived": false } ],
+        "labels": [],
+        "created": "2026-07-01T09:00:00.000+0300",
+        "updated": "2026-07-14T12:30:00.000+0300"
+      }
+    },
+    {
+      "id": "900002",
+      "key": "MPTPSUPP-90002",
+      "self": "https://jira.example.invalid/rest/api/2/issue/900002",
+      "fields": {
+        "summary": "[DEMO] Sample task in review",
+        "status": {
+          "id": "14560",
+          "name": "Ревью",
+          "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" }
+        },
+        "assignee": { "name": "demo.user3", "key": "demo.user3", "displayName": "Demo User Three", "active": true },
+        "reporter": { "name": "demo.user1", "key": "demo.user1", "displayName": "Demo User One", "active": true },
+        "issuetype": { "id": "1", "name": "Bug", "subtask": false },
+        "fixVersions": [ { "id": "10001", "name": "MP 5.8.0 (demo)", "released": false, "archived": false } ],
+        "labels": ["demo"],
+        "created": "2026-07-02T10:15:00.000+0300",
+        "updated": "2026-07-14T15:45:00.000+0300"
+      }
+    },
+    {
+      "id": "900003",
+      "key": "MPTPSUPP-90003",
+      "self": "https://jira.example.invalid/rest/api/2/issue/900003",
+      "fields": {
+        "summary": "[DEMO] Sample task in backlog, unassigned",
+        "status": {
+          "id": "14555",
+          "name": "Бэклог",
+          "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" }
+        },
+        "assignee": null,
+        "reporter": { "name": "demo.user2", "key": "demo.user2", "displayName": "Demo User Two", "active": true },
+        "issuetype": { "id": "3", "name": "Task", "subtask": false },
+        "fixVersions": [],
+        "labels": [],
+        "created": "2026-07-03T08:00:00.000+0300",
+        "updated": "2026-07-10T08:00:00.000+0300"
+      }
+    },
+    {
+      "id": "900004",
+      "key": "MPTPSUPP-90004",
+      "self": "https://jira.example.invalid/rest/api/2/issue/900004",
+      "fields": {
+        "summary": "[DEMO] Sample task testing on stage",
+        "status": {
+          "id": "16252",
+          "name": "Тестирование на тестовой",
+          "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" }
+        },
+        "assignee": { "name": "demo.qa1", "key": "demo.qa1", "displayName": "Demo QA One", "active": true },
+        "reporter": { "name": "demo.user3", "key": "demo.user3", "displayName": "Demo User Three", "active": true },
+        "issuetype": { "id": "3", "name": "Task", "subtask": false },
+        "fixVersions": [ { "id": "10002", "name": "MP 5.7.27 (demo)", "released": false, "archived": false } ],
+        "labels": ["demo", "qa"],
+        "created": "2026-07-04T11:20:00.000+0300",
+        "updated": "2026-07-14T09:05:00.000+0300"
+      }
+    },
+    {
+      "id": "900005",
+      "key": "MPTPSUPP-90005",
+      "self": "https://jira.example.invalid/rest/api/2/issue/900005",
+      "fields": {
+        "summary": "[DEMO] Sample task ready for release",
+        "status": {
+          "id": "11051",
+          "name": "Релиз",
+          "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" }
+        },
+        "assignee": { "name": "demo.user1", "key": "demo.user1", "displayName": "Demo User One", "active": true },
+        "reporter": { "name": "demo.user2", "key": "demo.user2", "displayName": "Demo User Two", "active": true },
+        "issuetype": { "id": "3", "name": "Task", "subtask": false },
+        "fixVersions": [ { "id": "10002", "name": "MP 5.7.27 (demo)", "released": false, "archived": false } ],
+        "labels": [],
+        "created": "2026-06-28T14:00:00.000+0300",
+        "updated": "2026-07-13T18:10:00.000+0300"
+      }
+    }
+  ]
+}

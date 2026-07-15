@@ -34,22 +34,34 @@ workstream_types:
 
 ## Logical tables
 
-| Table | Key fields | Purpose |
-|---|---|---|
-| `people` | `id`, `name`, `jira_user`, `gitlab_user`, `role` | Маппинг личностей (без People-экрана в MVP) |
-| `sprints` | `jira_id`, `name`, `start`, `end`, `state` | Контекст спринта |
-| `issues` | `key`, `summary`, `status`, `assignee_id`, `sprint_id`, `fix_version` | Якорь |
-| `workstream_types` | `code` PK, `display_name`, `sort_order`, `is_active` | Конфигурируемые типы |
-| `workstreams` | `issue_id`, `workstream_type_code`, `owner_id`, `derived_status` | Issue × Workstream Type |
-| `repositories` | `gitlab_id`, `name`, `workstream_type_code` | Repo → Workstream Type |
-| `branches` | `repo_id`, `name`, `issue_key`, `last_commit_at`, `author_id` | Feature branches |
-| `commits` | `sha`, `branch_id`, `author_id`, `message`, `committed_at` | Dev activity |
-| `merge_requests` | `iid`, `repo_id`, `issue_key`, `state`, reviewers/approvals | Review gate |
-| `builds` | `jenkins_job`, `build_no`, `status`, `branch`, `mr_iid`, `started_at` | CI result |
-| `activity_events` | `id`, `occurred_at`, `issue_key`, `workstream_type_code`, `actor_id`, `type`, `payload` | Timeline + Feed |
-| `dependencies` | `from_ws`, `to_ws`, `type`, `source` | Блокеры между workstreams |
-| `risk_flags` | `issue_id`, `code`, `severity`, `open` | Риски |
-| `sync_state` | `source`, `last_sync_at`, `cursor` | Watermark scheduler |
+| Table | Key fields | Purpose | Status |
+|---|---|---|---|
+| `people` | `id`, `name`, `jira_user`, `gitlab_user`, `role` | Маппинг личностей (без People-экрана в MVP) | Planned |
+| `sprints` | `jira_id`, `name`, `start`, `end`, `state` | Контекст спринта | **Planned / future** — отложено с Phase 2.3: board 718 — Kanban, активных sprint-данных сейчас нет; вводится вместе с sprint metadata из Jira |
+| `issues` | `id`, `jira_id`, `issue_key`, `summary`, `status_name`, `status_category`, `assignee_username`, `assignee_display_name`, `issue_type`, `jira_created`, `jira_updated`, `synced_at` | Якорь — реальная таблица Phase 2.3 (см. ниже) | **Real (Phase 2.3, реализовано)** |
+| `issue_fix_versions` | `issue_id` (FK → `issues.id`), `fix_version_name` | Множественные fix versions одной issue (не единичное поле) | **Real (Phase 2.3)** |
+| `issue_labels` | `issue_id` (FK → `issues.id`), `label` | Jira labels issue, симметрично `issue_fix_versions` | **Real (Phase 2.3)** |
+| `workstream_types` | `code` PK, `display_name`, `sort_order`, `is_active` | Конфигурируемые типы | Planned |
+| `workstreams` | `issue_id`, `workstream_type_code`, `owner_id`, `derived_status` | Issue × Workstream Type | Planned |
+| `repositories` | `gitlab_id`, `name`, `workstream_type_code` | Repo → Workstream Type | Planned |
+| `branches` | `repo_id`, `name`, `issue_key`, `last_commit_at`, `author_id` | Feature branches | Planned |
+| `commits` | `sha`, `branch_id`, `author_id`, `message`, `committed_at` | Dev activity | Planned |
+| `merge_requests` | `iid`, `repo_id`, `issue_key`, `state`, reviewers/approvals | Review gate | Planned |
+| `builds` | `jenkins_job`, `build_no`, `status`, `branch`, `mr_iid`, `started_at` | CI result | Planned |
+| `activity_events` | `id`, `occurred_at`, `issue_key`, `workstream_type_code`, `actor_id`, `type`, `payload` | Timeline + Feed | Planned |
+| `dependencies` | `from_ws`, `to_ws`, `type`, `source` | Блокеры между workstreams | Planned |
+| `risk_flags` | `issue_id`, `code`, `severity`, `open` | Риски | Planned |
+| `sync_state` | `source`, `last_sync_at`, `cursor` | Watermark scheduler | **Planned / future** — отложено с Phase 2.3: incremental sync и watermark/cursor ещё не реализованы (сейчас — full-refresh постраничный upsert по `jira_id` при каждом запуске); вводится вместе с incremental sync / scheduler |
+
+### `issues` — matching key (Phase 2.3)
+
+Upsert матчит существующую строку по `jira_id` (иммутабельный Jira internal id), **не** по `key`: `key` может измениться при переносе issue между Jira-проектами, `jira_id` — никогда. `key` остаётся уникальным и является бизнес-якорем связей (ADR-001) — используется для join с GitLab/Jenkins и для отображения в UI, но не для поиска строки при sync.
+
+`fixVersions`/`labels` реализованы как `@ElementCollection` (без отдельных JPA-сущностей/repository) — `issue_fix_versions`/`issue_labels` — только value-таблицы с уникальностью `(issue_id, value)` и `ON DELETE CASCADE`.
+
+**Реализационное отклонение (2026-07-15, при кодировании Phase 2.3):** физическая колонка бизнес-якоря названа `issue_key`, а не `key`, как было в исходном эскизе выше. `KEY` — зарезервированное слово SQL; H2 (тестовая БД) принимает его без кавычек в `CREATE TABLE`, но отвергает без кавычек в обычных `SELECT`-выражениях, а сквозное квотирование (`objectQuotingStrategy: QUOTE_ALL_OBJECTS`) оказалось хрупким (ломает регистр имени схемы между H2/PostgreSQL). На уровне Java контракт не изменился — `IssueEntity.getKey()`/`IssueUpsertCommand.key()` называются `key`, только физическое имя колонки в БД — `issue_key`. Matching-логика (по `jira_id`, не по `key`) не затронута. См. [session_log.md](./session_log.md) (Phase 2.3 Persistence implemented).
+
+Подробности дизайна и обоснование — [decisions.md](./decisions.md) (Design notes, 2026-07-15) и [session_log.md](./session_log.md).
 
 ## activity_events
 

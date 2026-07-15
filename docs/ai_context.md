@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
-| **Version** | 2.3 |
-| **Stage** | Phase 2.1 — Jira Client: done (client + auth only); Phase 2.2 (Jira Sync) — next |
-| **Last updated** | 2026-07-14 |
+| **Version** | 2.5 |
+| **Stage** | Phase 2.1 — Jira Client: done; Task 2.3 (board context provider): done; Phase 2.2 (Jira Sync) — application layer done (`sync.jira`); Phase 2.3 (Persistence) — done (`domain.issue`, page-by-page upsert); Phase 2.4 (REST API) — next |
+| **Last updated** | 2026-07-15 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
 
@@ -38,7 +38,10 @@
 | Backend skeleton (Spring Boot + PostgreSQL + Liquibase + Actuator) | Done — см. [backend/README.md](../backend/README.md) |
 | Frontend | **Not started** |
 | Jira REST Client + auth (Phase 2.1) | Done — `integration.jira` (`config`/`auth`/`client`/`dto`/`exception`), Spring `WebClient`, Basic/Bearer(PAT) auth. См. [backend/README.md](../backend/README.md#jira-rest-client-phase-21) |
-| Jira Sync / Persistence / REST API / Scheduler | **Next** — Phase 2.2→2.5 по [roadmap.md](./roadmap.md): Sync (`POST /api/admin/sync/jira`) → Persistence → REST API → scheduler (Phase 2.5) |
+| Jira board context provider (Task 2.3) | Done — `integration.jira.provider`: `JiraContextProvider` + `Rest`/`Mock` реализации, переключение `jira.mode=rest\|mock` (офлайн-разработка без аккаунта, mock защищён от prod). См. [session_log.md](./session_log.md), [decisions.md](./decisions.md) (Design notes) |
+| Jira Sync (Phase 2.2) — application layer | Done — пакет `sync.jira`: `JiraSyncService` (пагинация поверх `JiraContextProvider`), `JiraIssueSnapshot` (seam к persistence), `JiraSyncResult`, конфиг `jira.sync.page-size`. См. [session_log.md](./session_log.md) |
+| Persistence (Phase 2.3) | Done — пакет `domain.issue`: `IssueEntity`/`IssueRepository`/`IssuePersistencePort`/`IssueUpsertCommand`/`IssueUpsertOutcome`/`IssueUpsertService`, Liquibase `0002-issues.yaml` (`issues`/`issue_fix_versions`/`issue_labels`). Upsert постранично, matching по `jiraId`. `sprints`/`sync_state` не созданы (отложены). **Без** REST endpoint/scheduler/security/incremental sync. См. [session_log.md](./session_log.md) |
+| REST API / Scheduler | **Next** — Phase 2.4→2.5 по [roadmap.md](./roadmap.md): REST API (`POST /api/admin/sync/jira`, `GET /api/issues`) → scheduler (Phase 2.5) |
 
 Discovery и Skeleton завершены. **Бизнес-код (Jira/GitLab/Jenkins, domain-сущности) пока не пишем**, пока не начат явный этап реализации интеграций ([roadmap.md](./roadmap.md)).
 

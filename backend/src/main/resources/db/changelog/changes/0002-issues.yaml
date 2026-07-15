@@ -1,0 +1,121 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0002-issues
+      author: delivery-monitor
+      comment: >-
+        Phase 2.3 Persistence (docs/roadmap.md). Real tables for the Jira issue anchor: `issues`
+        (matched on upsert by the immutable `jira_id`, not the business-anchor `key` — see
+        docs/database.md), plus `issue_fix_versions`/`issue_labels` value tables for the
+        multi-valued fixVersions/labels. `sprints`/`sync_state` are deliberately not created yet
+        (see docs/decisions.md, 2026-07-15). The business-anchor column is physically named
+        `issue_key`, not `key`: `KEY` is a reserved SQL keyword that H2 (test database) accepts
+        unquoted in `CREATE TABLE` but rejects unquoted in ordinary `SELECT` expressions, and
+        quoting strategies proved fragile across H2/PostgreSQL schema-name casing. The Java-level
+        contract (`IssueEntity.getKey()`, `IssueUpsertCommand.key()`) is unaffected — only the
+        physical column name differs from the original docs/database.md sketch.
+      changes:
+        - createTable:
+            tableName: issues
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: jira_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: issue_key
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: summary
+                  type: VARCHAR(1000)
+              - column:
+                  name: status_name
+                  type: VARCHAR(100)
+              - column:
+                  name: status_category
+                  type: VARCHAR(100)
+              - column:
+                  name: assignee_username
+                  type: VARCHAR(200)
+              - column:
+                  name: assignee_display_name
+                  type: VARCHAR(200)
+              - column:
+                  name: issue_type
+                  type: VARCHAR(100)
+              - column:
+                  name: jira_created
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: jira_updated
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: synced_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: issues
+            columnNames: jira_id
+            constraintName: uk_issues_jira_id
+        - addUniqueConstraint:
+            tableName: issues
+            columnNames: issue_key
+            constraintName: uk_issues_issue_key
+        - createTable:
+            tableName: issue_fix_versions
+            columns:
+              - column:
+                  name: issue_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fix_version_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: issue_fix_versions
+            columnNames: issue_id, fix_version_name
+            constraintName: uk_issue_fix_versions_issue_id_name
+        - addForeignKeyConstraint:
+            baseTableName: issue_fix_versions
+            baseColumnNames: issue_id
+            referencedTableName: issues
+            referencedColumnNames: id
+            constraintName: fk_issue_fix_versions_issue_id
+            onDelete: CASCADE
+        - createTable:
+            tableName: issue_labels
+            columns:
+              - column:
+                  name: issue_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: label
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: issue_labels
+            columnNames: issue_id, label
+            constraintName: uk_issue_labels_issue_id_label
+        - addForeignKeyConstraint:
+            baseTableName: issue_labels
+            baseColumnNames: issue_id
+            referencedTableName: issues
+            referencedColumnNames: id
+            constraintName: fk_issue_labels_issue_id
+            onDelete: CASCADE

@@ -36,8 +36,20 @@ public class JiraProperties {
     /** Jira project keys relevant to this Monitor instance (informational at this stage). */
     private List<String> projectKeys = List.of("MPTPSUPP");
 
+    /** Board id this Monitor observes (docs/discovery.md §9.1 — "МПЛК доска", Kanban). Informational context. */
+    private Long boardId = 718L;
+
     /** Default board filter id, used later by sync/board tasks (Phase 2.2+). */
     private Long defaultFilterId = 30532L;
+
+    /**
+     * Data source for the {@code JiraContextProvider} (Phase 2.3): {@link Mode#REST} calls the
+     * real Jira Server, {@link Mode#MOCK} serves in-memory sanitized demo data for offline
+     * development. Default is {@link Mode#REST}; {@code MOCK} is guarded against production use
+     * (see {@code MockJiraContextProvider}).
+     */
+    @NotNull(message = "jira.mode must be set (rest or mock)")
+    private Mode mode = Mode.REST;
 
     @NotNull(message = "jira.auth must be configured")
     @Valid
@@ -75,12 +87,28 @@ public class JiraProperties {
         this.projectKeys = projectKeys;
     }
 
+    public Long getBoardId() {
+        return boardId;
+    }
+
+    public void setBoardId(Long boardId) {
+        this.boardId = boardId;
+    }
+
     public Long getDefaultFilterId() {
         return defaultFilterId;
     }
 
     public void setDefaultFilterId(Long defaultFilterId) {
         this.defaultFilterId = defaultFilterId;
+    }
+
+    public Mode getMode() {
+        return mode;
+    }
+
+    public void setMode(Mode mode) {
+        this.mode = mode;
     }
 
     public Auth getAuth() {
@@ -95,6 +123,14 @@ public class JiraProperties {
     public enum AuthType {
         BASIC,
         BEARER
+    }
+
+    /** Where {@code JiraContextProvider} reads from — see {@link #mode}. */
+    public enum Mode {
+        /** Call the real Jira Server via {@code JiraClient}. */
+        REST,
+        /** Serve in-memory sanitized demo data for offline development. Never for production. */
+        MOCK
     }
 
     public static class Auth {

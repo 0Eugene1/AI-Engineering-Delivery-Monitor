@@ -1,0 +1,16 @@
+# =============================================================================
+# OFFLINE / DEMO profile — activate with: --spring.profiles.active=jira-mock
+# =============================================================================
+# Enables the in-memory MockJiraContextProvider, which serves SANITIZED DEMO data
+# (classpath:jira/mock/board-718-filter-30532.json) so the app can run and the layers
+# on top of it can be developed WITHOUT a real Jira service account.
+#
+# NEVER use this profile in production. MockJiraContextProvider additionally refuses to
+# start if a 'prod'/'production' profile is active, so mock demo data cannot ship to prod.
+jira:
+  mode: mock
+  auth:
+    # Placeholder only — satisfies the fail-fast @NotBlank validation on jira.auth.token
+    # for offline runs. This is NOT a real secret and is never used to call Jira in mock mode.
+    type: bearer
+    token: mock-offline-placeholder-token

@@ -21,6 +21,7 @@ Source of Truth для **AI Engineering Delivery Monitor**.
 | [database.md](./database.md) | Логическая схема, Workstream Type, events |
 | [api.md](./api.md) | REST-контракт MVP |
 | [integrations.md](./integrations.md) | Jira / GitLab / Jenkins |
+| [security.md](./security.md) | Принципы безопасности: auth, roles, secrets, network, audit |
 | [ux.md](./ux.md) | Экраны, Timeline, Release Health |
 | [decisions.md](./decisions.md) | Индекс ADR |
 | [adr/](./adr/) | Architecture Decision Records |
@@ -44,6 +45,7 @@ Source of Truth для **AI Engineering Delivery Monitor**.
 | Таблицы / поля / статусы | `database.md`, при необходимости `api.md`, `glossary.md` |
 | Эндпоинты / контракты | `api.md`, `ux.md` |
 | Jira / GitLab / Jenkins | `integrations.md`, `architecture.md` |
+| Безопасность (auth, роли, секреты, сеть, аудит) | `security.md` |
 | Экраны / UX-приоритеты | `ux.md`, `roadmap.md`, `vision.md` |
 | Scope / порядок этапов | `roadmap.md`, `vision.md` |
 | Новое trade-off | `docs/adr/00XX-….md` + `decisions.md` |

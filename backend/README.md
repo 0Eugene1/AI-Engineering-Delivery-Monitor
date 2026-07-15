@@ -1,6 +1,6 @@
 # Backend
 
-Spring Boot modular monolith. **Status:** Skeleton (Phase 1) done; Jira REST Client (Phase 2.1 of [roadmap.md](../docs/roadmap.md)) done. No sync orchestration, persistence, REST API, scheduler, GitLab or Jenkins yet.
+Spring Boot modular monolith. **Status:** Skeleton (Phase 1) done; Jira REST Client (Phase 2.1 of [roadmap.md](../docs/roadmap.md)) done; Jira board context provider (Task 2.3) done — with a config-switchable offline mock. No sync orchestration, persistence, REST API, scheduler, GitLab or Jenkins yet.
 
 ## Stack
 
@@ -48,11 +48,12 @@ The context test uses an embedded H2 database in PostgreSQL-compatibility mode, 
 ```text
 src/main/java/ru/eltc/deliverymonitor/
 ├── DeliveryMonitorApplication.java
-└── integration/jira/           # Phase 2.1 — Jira REST client (this phase only, see below)
+└── integration/jira/           # Jira REST client + board context provider (see below)
     ├── config/                 # JiraProperties (jira.* in application.yml) + WebClient bean
     ├── auth/                   # Basic / Bearer(PAT) authentication strategies
     ├── client/                 # JiraClient — getMyself(), search(), searchByFilter()
     ├── dto/                    # Jira REST API v2 response DTOs (records)
+    ├── provider/               # Task 2.3 — JiraContextProvider (rest/mock, switched by jira.mode)
     └── exception/              # JiraClientException
 ```
 
@@ -77,12 +78,39 @@ committed; `JIRA_USERNAME`/`JIRA_TOKEN` are empty by default.
 | `JIRA_CONNECT_TIMEOUT` | `5s` | TCP connect timeout |
 | `JIRA_RESPONSE_TIMEOUT` | `10s` | Overall response timeout |
 | `JIRA_PROJECT_KEYS` | `MPTPSUPP` | Informational, comma-separated |
+| `JIRA_BOARD_ID` | `718` | Observed board id (`docs/discovery.md` §9.1) |
 | `JIRA_DEFAULT_FILTER_ID` | `30532` | Board filter id (`docs/discovery.md` §9.1) |
+| `JIRA_MODE` | `rest` | Board context source: `rest` (real Jira) or `mock` (offline demo data) |
 
 `JiraClient` methods: `getMyself()` (auth smoke test), `search(jql, startAt, maxResults, fields)`,
 `searchByFilter(filterId, startAt, maxResults)`. All return `Mono<...>`; non-2xx responses raise
 `JiraClientException` (HTTP status + Jira `errorMessages`). Unit tests use a mock HTTP server
 (`mockwebserver3`) — no real Jira instance required to run `mvnw verify`.
+
+## Jira board context provider (Task 2.3)
+
+`integration.jira.provider.JiraContextProvider` is a domain-meaningful seam over `JiraClient`:
+`getBoardContext(startAt, maxResults)` returns a `JiraBoardContext` (board/filter ids, paging,
+`total`, the issues page, `fetchedAt`, `mocked`). Future sync orchestration (Phase 2.2/2.4) depends
+on this interface, **not** on `JiraClient` directly.
+
+Two implementations, selected purely by config (`jira.mode`, default `rest`):
+
+- **`RestJiraContextProvider`** (`jira.mode=rest`) — fetches from the real Jira via `JiraClient.searchByFilter`.
+- **`MockJiraContextProvider`** (`jira.mode=mock`) — serves **sanitized demo data** from
+  `classpath:jira/mock/board-718-filter-30532.json`, so the app and the layers built on it can be
+  developed **without a real Jira service account**.
+
+Run offline with the `jira-mock` profile:
+
+```powershell
+cd backend
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=jira-mock"
+```
+
+**Mock is never for production:** `MockJiraContextProvider` refuses to start if a `prod`/`production`
+profile is active, and the fixture is explicitly marked as demo/sanitized. Switching to real Jira when
+a token becomes available is a config change only (`JIRA_TOKEN` + `jira.mode=rest`) — no code change.
 
 ## Migrations
 
@@ -90,8 +118,9 @@ Liquibase changesets live in `src/main/resources/db/changelog/changes/`, include
 
 ## Next task
 
-Phase **2.1** (Jira REST Client + auth) is done — stop here until explicitly told to continue.
+Phase **2.1** (Jira REST Client + auth) and Task **2.3** (board context provider + config-switchable
+mock) are done — stop here until explicitly told to continue.
 
-Дальше по порядку (не начинать без явного go-ahead): **2.2** `POST /api/admin/sync/jira` (ручной sync,
-board/filter context + issue search using this client) → **2.3** PostgreSQL persistence → **2.4**
-`GET /api/issues` → **2.5** scheduler. См. [roadmap.md](../docs/roadmap.md).
+Дальше по порядку (не начинать без явного go-ahead): **Phase 2.2 «Jira Sync»** — оркестрация
+`POST /api/admin/sync/jira` поверх `JiraContextProvider` (task 2.4 «Получение задач») → PostgreSQL
+persistence (task 2.5) → `GET /api/issues` → scheduler. См. [roadmap.md](../docs/roadmap.md).

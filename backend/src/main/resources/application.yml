@@ -29,7 +29,16 @@ jira:
   connect-timeout: ${JIRA_CONNECT_TIMEOUT:5s}
   response-timeout: ${JIRA_RESPONSE_TIMEOUT:10s}
   project-keys: ${JIRA_PROJECT_KEYS:MPTPSUPP}
+  board-id: ${JIRA_BOARD_ID:718}
   default-filter-id: ${JIRA_DEFAULT_FILTER_ID:30532}
+  # JiraContextProvider data source (Phase 2.3): rest = real Jira, mock = in-memory sanitized
+  # demo data for offline development. Default rest. Enable mock via the 'jira-mock' Spring
+  # profile (see application-jira-mock.yml); mock is refused when a production profile is active.
+  mode: ${JIRA_MODE:rest}
+  # Jira sync (Phase 2.2) — application-layer orchestration over JiraContextProvider.
+  sync:
+    # Page size when paginating the board filter search. Operational setting, not hard-coded.
+    page-size: ${JIRA_SYNC_PAGE_SIZE:50}
   auth:
     # bearer = Personal Access Token (Authorization: Bearer ...), recommended for Jira Server 8.14+.
     # basic  = HTTP Basic (username + password/PAT). Confirm which one the service account uses

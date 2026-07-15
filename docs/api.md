@@ -3,14 +3,14 @@
 | | |
 |---|---|
 | **Status** | Draft (MVP contract) |
-| **Version** | 2.1 |
+| **Version** | 2.2 |
 | **Style** | REST, JSON |
-| **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md) |
+| **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md), [security.md](./security.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) |
 
 ## Conventions
 
 - Base path: `/api`
-- Auth: корпоративный SSO / OIDC / LDAP (детали стенда — при skeleton)
+- Auth (baseline, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)): `/api/admin/**` требуют Bearer admin-токен из env (`DELIVERY_MONITOR_ADMIN_TOKEN`, **отдельный** от `JIRA_TOKEN`); read-эндпоинты (`GET /api/**`) пока открыты внутри VPN. Корпоративный SSO / OIDC / LDAP — **целевая** модель для пользователей, вводится с UI (детали стенда — при развёртывании). См. [security.md](./security.md) §2.
 - Ошибки: стандартный JSON `{ "error": "...", "code": "..." }`
 - Время: ISO-8601 UTC
 - Workstream Type в ответах — `code` + `display_name` из справочника (не хардкод)
@@ -78,7 +78,7 @@ Response (sketch):
 }
 ```
 
-Защита: admin-only (auth TBD на Skeleton; минимум — не публичный без auth на prod).
+Защита: **admin-only** через Bearer admin-токен из env (`DELIVERY_MONITOR_ADMIN_TOKEN`, отдельный от `JIRA_TOKEN` — разные границы доверия), baseline по [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) / [security.md](./security.md) §2, §5. Привилегированный вызов аудируется ([security.md](./security.md) §7).
 
 **Порядок внедрения:** сначала этот endpoint работает end-to-end, затем `GET /api/issues`, затем `@Scheduled` polling ([roadmap.md](./roadmap.md) Phase 2.5).
 

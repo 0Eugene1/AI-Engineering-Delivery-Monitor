@@ -3,10 +3,10 @@
 | | |
 |---|---|
 | **Status** | In progress |
-| **Version** | 0.2 |
+| **Version** | 0.3 |
 | **Stage** | Phase 0 — Discovery ([roadmap.md](./roadmap.md)) |
 | **Related** | [integrations.md](./integrations.md), [database.md](./database.md), [architecture.md](./architecture.md), [glossary.md](./glossary.md) |
-| **Last updated** | 2026-07-14 (mptp8 docs) |
+| **Last updated** | 2026-07-15 (task 2.2 Auth check) |
 
 ## Цель этапа
 
@@ -167,7 +167,7 @@ Rank field (порядок карточек): custom field **11350**.
 | `[known]` | Roster `jira_user` команды | Filter 30532 assignee list | §9.1 `team_roster` |
 | `[assumed]` | Monitor MVP polling = filter 30532 | Согласовать с тимлидом | Issue count = карточки на board |
 | `[TODO]` | Доп. фильтр для Release Health (fixVersion swimlane?) | Тимлид | Phase 5 |
-| `[TODO]` | PAT vs basic auth на 8.20.30 — **сетевая доступность и версия подтверждены** 2026-07-14 (см. «Gate-check» ниже), **сам auth ещё не подтверждён** — нужен реальный токен | Jira-админ; [Atlassian docs](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) | `GET /rest/api/2/myself` под выданным аккаунтом — прогнать `backend/.../jira/JiraSmokeTest.java` с реальным `JIRA_TOKEN` |
+| `[TODO]` | PAT vs basic auth на 8.20.30 — **сетевая доступность и версия подтверждены** 2026-07-14 (см. «Gate-check» ниже), **код/конфиг auth и smoke test повторно проверены** 2026-07-15 (см. «Task 2.2 (Auth) check» ниже), **сам auth ещё не подтверждён** — нужен реальный токен | Jira-админ; [Atlassian docs](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) | `GET /rest/api/2/myself` под выданным аккаунтом — прогнать `backend/.../jira/JiraSmokeTest.java` с реальным `JIRA_TOKEN` (инструкция ниже) |
 | `[TODO]` | Webhook `issue_updated` — да/нет, URL | Jira-админ (System → WebHooks) | Тестовый POST на endpoint Monitor |
 | `[TODO]` | Rate limits при polling | Jira-админ / нагрузочная политика | Согласовать интервал 2–5 мин |
 
@@ -183,6 +183,48 @@ Rank field (порядок карточек): custom field **11350**.
 | `GET /rest/api/2/search?jql=filter=30532` без валидных credentials | `400 Bad Request`, тело `{"errorMessages":["Фильтр с ID '30532' не существует или у вас нет прав для просмотра его данных."]}` — стандартное generic-сообщение Jira для анонимного/невалидного доступа (не значит, что filter 30532 не существует — Jira намеренно не различает «нет фильтра» и «нет прав» для неавторизованных запросов); тело корректно распарсилось в `JiraErrorResponseDto`/`JiraClientException` |
 
 **Вывод:** транспортный уровень (TLS, таймауты, парсинг реальных Jira-ответов на ошибки) подтверждён на настоящем сервере и совпадает с поведением, которое уже покрыто unit-тестами на mock-сервере — расхождений не найдено. **Открытый TODO** — авторизованный прогон (`PAT` или `Basic`) с реальным сервисным аккаунтом, чтобы подтвердить: (а) какой auth type реально работает на этой инсталляции, (б) что filter 30532 действительно возвращает issues. Для этого добавлен `backend/src/test/java/ru/eltc/deliverymonitor/integration/jira/JiraSmokeTest.java` — отключён по умолчанию (`@EnabledIfEnvironmentVariable(JIRA_TOKEN)`), не входит в обычный `mvnw verify`; инструкция запуска — в Javadoc класса. После первого успешного прогона с реальным токеном — обновить эту секцию и сменить статус строки выше на `[known]`.
+
+### Task 2.2 (Auth) check — 2026-07-15
+
+Roadmap task **2.2 Auth** ([roadmap.md](./roadmap.md), «Phase 2 — детализация»): "Конфиг credentials (env), basic auth / PAT; smoke `GET /rest/api/2/myself`". **Done when:** реальный Jira token из env → `/myself` 200. В этой сессии повторно проверена готовность к этому шагу, **без** реального токена (недоступен в этой среде — не в env, не в файлах `.env*`) и **без** написания нового кода (sync/БД/entity/repository/scheduler/REST API сознательно не добавлялись — вне scope задачи):
+
+| Проверка | Результат |
+|---|---|
+| `JiraSmokeTest` существует и покрывает нужные вызовы | ✅ `backend/src/test/java/.../integration/jira/JiraSmokeTest.java` — `myselfAuthenticatesAgainstRealJira()` (`GET /rest/api/2/myself`) и `searchByDefaultFilterReturnsIssues()` (`GET /rest/api/2/search`, filter из `JIRA_DEFAULT_FILTER_ID`, по умолчанию 30532) |
+| Использует **production** `JiraClient` | ✅ Тест собирает `JiraClient` через те же production-бины, что и приложение — `JiraClientConfig#jiraAuthenticationStrategy` + `JiraClientConfig#jiraWebClient` (никакой отдельной/тестовой реализации auth или HTTP-вызовов нет) |
+| Конфигурация env variables подтверждена в `backend/src/main/resources/application.yml` | ✅ `JIRA_BASE_URL` (`jira.base-url`, default `https://jira.eltc.ru`), `JIRA_AUTH_TYPE` (`jira.auth.type`, default `bearer`), `JIRA_USERNAME` (`jira.auth.username`, default пусто), `JIRA_TOKEN` (`jira.auth.token`, default пусто, `@NotBlank` — fail-fast), `JIRA_DEFAULT_FILTER_ID` (`jira.default-filter-id`, default `30532`) — все пять читаются `JiraSmokeTest` напрямую из `System.getenv`, и те же переменные разрешает Spring через `application.yml` в production |
+| Поведение без токена — build не ломается | ✅ `.\mvnw.cmd clean verify` (JDK 21, Android Studio JBR): `Tests run: 25, Failures: 0, Errors: 0, Skipped: 2` (2 skipped = оба метода `JiraSmokeTest`, `@EnabledIfEnvironmentVariable(JIRA_TOKEN)` не выполнено) → `BUILD SUCCESS` |
+| Реальный авторизованный прогон (`/myself` → 200) | ❌ **Не выполнен** — `JIRA_TOKEN` недоступен в этой сессии. Остаётся открытым `TODO` (см. таблицу выше и §8) |
+
+**Как запустить smoke test, когда появится реальный токен** (PowerShell, Windows):
+
+```powershell
+cd backend
+$env:JIRA_TOKEN = "<реальный PAT или пароль сервисного аккаунта>"
+$env:JIRA_AUTH_TYPE = "bearer"          # или "basic" — см. TODO выше, auth type ещё не подтверждён
+$env:JIRA_USERNAME = "<нужно только для JIRA_AUTH_TYPE=basic>"
+$env:JIRA_BASE_URL = "https://jira.eltc.ru"          # опционально — это default
+$env:JIRA_DEFAULT_FILTER_ID = "30532"                # опционально — это default
+.\mvnw.cmd test -Dtest=JiraSmokeTest
+```
+
+Ожидаемый результат при успехе: оба теста зелёные (не skipped), в выводе — `[JiraSmokeTest] /myself OK -> name=...` и `[JiraSmokeTest] /search?jql=filter=30532 OK -> total=...`. После прогона — обновить статус auth в §1 (сменить `[TODO]` на `[known]`, зафиксировать, какой `JIRA_AUTH_TYPE` реально работает) и сделать запись в [session_log.md](./session_log.md).
+
+**Вывод:** Task 2.2 (Auth) с точки зрения **кода и конфигурации** готова полностью — production `JiraClient`/`JiraClientConfig` уже поддерживают auth через env (Basic и Bearer), fail-fast валидация не даёт стартовать без `JIRA_TOKEN`, smoke-тест написан и корректно skip-ается без credentials. Единственное, что блокирует формальное закрытие task 2.2 (`Done when: реальный token → /myself 200`) — отсутствие реального токена в этой среде. Ничего не выдумано и не сымитировано взамен реального прогона.
+
+### Офлайн-разработка без реального аккаунта (`jira.mode=mock`) — 2026-07-15 (Task 2.3)
+
+Пока реальный сервисный аккаунт Jira не выдан, разработку следующих слоёв можно вести офлайн: Task 2.3 добавил `JiraContextProvider` с двумя реализациями, переключаемыми конфигом `jira.mode` (default `rest`):
+
+- `jira.mode=rest` — реальная Jira через `JiraClient` (нужен `JIRA_TOKEN`);
+- `jira.mode=mock` — **санитизированные demo-данные** из `classpath:jira/mock/board-718-filter-30532.json` (fake-пользователи `demo.*`, форма ответа как у filter 30532). Поднимается профилем `jira-mock`:
+
+```powershell
+cd backend
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=jira-mock"
+```
+
+**Mock никогда не используется в production:** `MockJiraContextProvider` отказывается стартовать при активном профиле `prod`/`production`. Переход на реальную Jira при появлении токена — задать `JIRA_TOKEN` и оставить `jira.mode=rest`; **код менять не нужно**. Реальный авторизованный прогон (`filter 30532` → issues) остаётся тем же открытым `TODO`, что и для auth выше.
 
 ### Почему важно
 

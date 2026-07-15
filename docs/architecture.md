@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.1 |
-| **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md) |
+| **Version** | 2.2 |
+| **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md), [security.md](./security.md) |
 
 ## Overview
 
@@ -48,21 +48,32 @@ Cursor canvas `architecture-design.canvas.tsx` — только локальны
 4. REST отдаёт данные экранам.
 5. AI Summary (позже) читает только REST Monitor, не БД.
 
+## Package dependency direction
+
+Слои зависят **только вниз**, каждый владеет собственными контрактами; обратной зависимости нет:
+
+```
+integration.jira  →  sync.jira  →  domain.issue
+```
+
+`sync.jira` зависит от `domain.issue` (вызывает `IssuePersistencePort`), но `domain.issue` ничего не импортирует из `sync.jira` — свой входной контракт (`IssueUpsertCommand`) он определяет сам; маппинг из `JiraIssueSnapshot` делает вызывающая сторона (`sync.jira`). Тот же принцип действует на границе `integration.jira → sync.jira` (`JiraContextProvider` — контракт integration-слоя, `sync.jira` от него зависит). См. [decisions.md](./decisions.md) (Design notes, 2026-07-15 — Phase 2.3 Persistence).
+
 ## Backend packages
 
 | Package | Responsibility | MVP |
 |---|---|---|
-| `integration.jira` | Poll sprint / issues / changelog / links | Yes |
+| `integration.jira` | HTTP-клиент + auth + wire DTO + `JiraContextProvider` (только integration layer) | Yes |
+| `sync.jira` | Application layer: `JiraSyncService` (оркестрация sync поверх `JiraContextProvider`, постраничная пагинация, нормализация в `JiraIssueSnapshot` — собственный контракт слоя), `JiraSyncResult` (агрегаты прогона) | Yes |
 | `integration.gitlab` | Poll/webhook: branches, commits, MR, notes | Yes |
 | `integration.jenkins` | Poll/webhook: builds | Yes |
-| `domain.issue` | Issue + sprint + fixVersion | Yes |
+| `domain.issue` | Issue + sprint + fixVersion. Persistence-слой (Phase 2.3, реализовано) — единственный владелец своих контрактов: `IssueEntity`, `IssueRepository`, `IssuePersistencePort` (+ `IssueUpsertCommand`, `IssueUpsertOutcome`), `IssueUpsertService` | Yes |
 | `domain.workstream` | Workstream = issue × Workstream Type | Yes |
 | `domain.workstream_type` | Справочник типов (config/data, не хардкод) | Yes |
 | `domain.timeline` | Единый поток событий по задаче | Yes |
 | `domain.activity` | Командный activity feed | Yes |
 | `domain.release` | Release Health по fixVersion | Yes |
 | `domain.risk` | Правила рисков | Yes |
-| `api` | REST controllers | Yes |
+| `api` | REST controllers + минимальный security enforcement (Spring Security scoped: Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)) | Yes |
 | AI Summary service | REST → LLM → markdown | After MVP |
 
 ## Core abstractions
