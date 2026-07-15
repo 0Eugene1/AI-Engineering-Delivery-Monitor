@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
-| **Version** | 2.6 |
-| **Stage** | Phase 2.1 — Jira Client: done; Task 2.3 (board context provider): done; Phase 2.2 (Jira Sync) — application layer done (`sync.jira`); Phase 2.3 (Persistence) — done (`domain.issue`, page-by-page upsert); Phase 2.4 (Admin Sync HTTP API) — done (`api.admin`, `api.security`, ADR-012); `GET /api/issues`/scheduler — next |
+| **Version** | 2.8 |
+| **Stage** | Phase 2.1 — Jira Client: done; Task 2.3 (board context provider): done; Phase 2.2 (Jira Sync) — application layer done (`sync.jira`); Phase 2.3 (Persistence) — done (`domain.issue`, page-by-page upsert); Phase 2.4 (Admin Sync HTTP API) — done (`api.admin`, `api.security`, ADR-012); Read API — done (`api.issue`: `GET /api/issues`, `GET /api/issues/{key}`; `GET /api/sprints/current` deliberately deferred — no `sprints` persistence); Phase 2.5 (Scheduler) — done (`sync.jira.JiraSyncScheduler`, `fixedDelay`, `jira.sync.enabled`/`jira.sync.interval`, in-process guard in `JiraSyncService`); Phase 3 (GitLab + Timeline) — next |
 | **Last updated** | 2026-07-15 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
@@ -42,9 +42,10 @@
 | Jira Sync (Phase 2.2) — application layer | Done — пакет `sync.jira`: `JiraSyncService` (пагинация поверх `JiraContextProvider`), `JiraIssueSnapshot` (seam к persistence), `JiraSyncResult`, конфиг `jira.sync.page-size`. См. [session_log.md](./session_log.md) |
 | Persistence (Phase 2.3) | Done — пакет `domain.issue`: `IssueEntity`/`IssueRepository`/`IssuePersistencePort`/`IssueUpsertCommand`/`IssueUpsertOutcome`/`IssueUpsertService`, Liquibase `0002-issues.yaml` (`issues`/`issue_fix_versions`/`issue_labels`). Upsert постранично, matching по `jiraId`. `sprints`/`sync_state` не созданы (отложены). **Без** REST endpoint/scheduler/security/incremental sync. См. [session_log.md](./session_log.md) |
 | Admin Sync HTTP API (Phase 2.4) | Done — `POST /api/admin/sync/jira` (`api.admin.JiraSyncController`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, реюз `JiraSyncResult`) + минимальный security-baseline (`api.security`: `SecurityConfig`/`AdminTokenAuthenticationFilter`/`AdminTokenProperties`, Bearer `DELIVERY_MONITOR_ADMIN_TOKEN`, stateless, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)). **Без** OIDC/JWT/LDAP/users/roles/UI/scheduler/audit database/incremental sync. См. [session_log.md](./session_log.md) |
-| `GET /api/issues` / Scheduler | **Next** — Phase 2.5+ по [roadmap.md](./roadmap.md): read API (`GET /api/issues`, `GET /api/sprints/current`) → scheduler |
+| Read API | Done — пакет `api.issue`: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`, `404` при отсутствии), `IssueQueryService` (`@Transactional(readOnly = true)`, Entity → `IssueResponse` DTO). Зависит **только** от `domain.issue`. **`GET /api/sprints/current` сознательно отложен** — нет `sprints` persistence, без mock/stub/live-Jira substitute (TODO в [discovery.md](./discovery.md)). Security baseline/sync flow не менялись. См. [session_log.md](./session_log.md) |
+| Scheduler (Phase 2.5) | Done — `sync.jira.JiraSyncScheduler` (`SchedulingConfigurer`, `ScheduledTaskRegistrar.addFixedDelayTask`, **не** `fixedRate`), env-driven `jira.sync.enabled` (default `false`)/`jira.sync.interval` (default `5m`), `@EnableScheduling` на `DeliveryMonitorApplication`. Вызывает ровно тот же `JiraSyncService.syncBoard()`, что manual `POST /api/admin/sync/jira` — не вызывает `Controller`, не вызывает `JiraClient` напрямую, не обходит `JiraSyncService`. In-process guard (`AtomicBoolean`) в `JiraSyncService` не даёт manual и scheduled sync выполняться одновременно — без HTTP `409`, без изменения формы `JiraSyncResult`. **Без** `sync_state`, distributed lock, incremental sync, retry framework. См. [session_log.md](./session_log.md) |
 
-Discovery и Skeleton завершены. **Jira integration + sync + issue persistence + admin sync HTTP API реализованы** (Phase 2.1–2.4). Следующий явный этап — read API и/или scheduler; GitLab/Jenkins и frontend — не начаты. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
+Discovery и Skeleton завершены. **Jira integration + sync + issue persistence + admin sync HTTP API + read API + scheduler реализованы** (Phase 2.1–2.5). Следующий явный этап — Phase 3 (GitLab + Timeline); `GET /api/sprints/current` ждёт sprint persistence; GitLab/Jenkins и frontend — не начаты. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
 
 ---
 

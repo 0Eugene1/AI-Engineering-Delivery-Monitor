@@ -37,7 +37,7 @@ workstream_types:
 | Table | Key fields | Purpose | Status |
 |---|---|---|---|
 | `people` | `id`, `name`, `jira_user`, `gitlab_user`, `role` | Маппинг личностей (без People-экрана в MVP) | Planned |
-| `sprints` | `jira_id`, `name`, `start`, `end`, `state` | Контекст спринта | **Planned / future** — отложено с Phase 2.3: board 718 — Kanban, активных sprint-данных сейчас нет; вводится вместе с sprint metadata из Jira |
+| `sprints` | `jira_id`, `name`, `start`, `end`, `state` | Контекст спринта | **Planned / future** — отложено с Phase 2.3: board 718 — Kanban, активных sprint-данных сейчас нет; вводится вместе с sprint metadata из Jira. **Блокирует `GET /api/sprints/current`** (Read API, 2026-07-15): endpoint сознательно не реализован до появления этой таблицы — без mock/stub/live-Jira substitute, см. TODO в [discovery.md](./discovery.md) |
 | `issues` | `id`, `jira_id`, `issue_key`, `summary`, `status_name`, `status_category`, `assignee_username`, `assignee_display_name`, `issue_type`, `jira_created`, `jira_updated`, `synced_at` | Якорь — реальная таблица Phase 2.3 (см. ниже) | **Real (Phase 2.3, реализовано)** |
 | `issue_fix_versions` | `issue_id` (FK → `issues.id`), `fix_version_name` | Множественные fix versions одной issue (не единичное поле) | **Real (Phase 2.3)** |
 | `issue_labels` | `issue_id` (FK → `issues.id`), `label` | Jira labels issue, симметрично `issue_fix_versions` | **Real (Phase 2.3)** |
@@ -51,7 +51,7 @@ workstream_types:
 | `activity_events` | `id`, `occurred_at`, `issue_key`, `workstream_type_code`, `actor_id`, `type`, `payload` | Timeline + Feed | Planned |
 | `dependencies` | `from_ws`, `to_ws`, `type`, `source` | Блокеры между workstreams | Planned |
 | `risk_flags` | `issue_id`, `code`, `severity`, `open` | Риски | Planned |
-| `sync_state` | `source`, `last_sync_at`, `cursor` | Watermark scheduler | **Planned / future** — отложено с Phase 2.3: incremental sync и watermark/cursor ещё не реализованы (сейчас — full-refresh постраничный upsert по `jira_id` при каждом запуске); вводится вместе с incremental sync / scheduler |
+| `sync_state` | `source`, `last_sync_at`, `cursor` | Watermark scheduler | **Planned / future** — отложено с Phase 2.3, подтверждено отложенным решением Phase 2.5 Scheduler design: incremental sync и watermark/cursor ещё не реализованы (сейчас — full-refresh постраничный upsert по `jira_id` при каждом запуске, в т.ч. из нового `sync.jira.JiraSyncScheduler`); вводится только вместе с incremental sync, отдельной будущей задачей |
 
 ### `issues` — matching key (Phase 2.3)
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.3 |
+| **Version** | 2.5 |
 | **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md), [discovery.md](./discovery.md) |
 
 ## Guiding rule
@@ -28,8 +28,9 @@
 | 2.2 Jira Sync — application layer (`sync.jira`: `JiraSyncService`/`JiraSyncResult`/`JiraIssueSnapshot`) | Done |
 | 2.3 Persistence (`domain.issue`, Liquibase `issues`/`issue_fix_versions`/`issue_labels`; `sprints`/`sync_state` отложены) | Done |
 | Admin Sync HTTP API — `POST /api/admin/sync/jira` + минимальный security-baseline (`api.admin`/`api.security`, Bearer admin-token, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)) | Done — помечено «Phase 2.4» в [ai_context.md](./ai_context.md)/[session_log.md](./session_log.md) |
-| Read API (`GET /api/issues`, `GET /api/sprints/current`) | **Next** |
-| Scheduler (`@Scheduled` polling) | Планируется после read API |
+| Read API — `GET /api/issues`, `GET /api/issues/{key}` (`api.issue`, зависит только от `domain.issue`) | **Done** |
+| `GET /api/sprints/current` | **Отложен** — нет `sprints` persistence (архитектурное решение, [database.md](./database.md), [discovery.md](./discovery.md) TODO); без mock/stub/live-Jira substitute |
+| Scheduler (`sync.jira.JiraSyncScheduler`, `fixedDelay`, `jira.sync.enabled`/`jira.sync.interval`, in-process guard в `JiraSyncService`) | **Done** |
 | Phase 3+ (GitLab / Jenkins / Timeline / Release Health / AI Summary) | Не начаты |
 
 **Замечание по нумерации:** в плановых таблицах ниже endpoint `POST /api/admin/sync/jira` отнесён к Phase 2.2, а «REST API» (read) — к Phase 2.4. Фактически admin-sync endpoint был выделен в **отдельный** шаг и во всей остальной документации помечен как **Phase 2.4**; read API и scheduler, соответственно, сдвинулись на Phase 2.5+.
@@ -45,8 +46,8 @@
 | **2.1 Jira Client** | 1–2 days | REST-клиент + auth к Jira | Smoke: `/rest/api/2/myself`, JQL search |
 | **2.2 Jira Sync** | 1–2 days | Оркестрация выгрузки (board/filter) | `POST /api/admin/sync/jira` → данные получены |
 | **2.3 Persistence** | 2–3 days | Liquibase + сохранение в PostgreSQL | После sync данные в БД |
-| **2.4 REST API** | 1–2 days | Read API для UI | `GET /api/issues`, `GET /api/sprints/current` |
-| **2.5 Jira Scheduler** *(после 2.4)* | 1 day | Polling 2–5 min | Фоновый sync без ручного POST |
+| **2.4 REST API** | 1–2 days | Read API для UI | `GET /api/issues` — **Done**; `GET /api/sprints/current` — отложен (нет `sprints` persistence) |
+| **2.5 Jira Scheduler** *(после 2.4)* | 1 day | Polling 2–5 min | Фоновый sync без ручного POST — **Done** |
 | **3. GitLab + Timeline** | 1.5–2 weeks | Workstreams + Issue Timeline | ≥90% задач с naming → события в Timeline |
 | **4. Activity Feed + Risks** | 3–5 days | Лента + risk badges | Стендап по Risks/Feed |
 | **5. Jenkins / CI + Release Health** | ~1 week | Builds + % по Workstream Type | Failed build → risk |
@@ -64,7 +65,7 @@ Phase 2.3 Persistence      ← PostgreSQL
        ↓
 Phase 2.4 REST API         ← GET /api/issues
        ↓
-Phase 2.5 Scheduler        ← polling (после того как ручной sync стабилен)
+Phase 2.5 Scheduler        ← polling (после того как ручной sync стабилен) — Done
        ↓
 Phase 3 GitLab + Timeline
 ```
@@ -82,8 +83,8 @@ Phase 3 GitLab + Timeline
 | **2.3 Получение контекста board** | Board 718 / filter 30532: активные sprints **если есть**, board configuration | Сохранение в БД, GET /issues | JQL filter 30532 выполняется, issues возвращаются |
 | **2.4 Получение задач** | Search по JQL filter 30532; поля: key, summary, status, assignee, fixVersion | PostgreSQL, scheduler | Список issues совпадает с filter view в Jira |
 | **2.5 Persistence** | Liquibase: `sprints`, `issues`, `sync_state`; upsert после sync | Scheduler, UI | После `POST …/sync/jira` строки в БД |
-| **2.6 REST API** | `GET /api/issues`, `GET /api/sprints/current` (из БД, не live Jira) | Scheduler, Board UI | curl → JSON из PostgreSQL |
-| **2.7 Scheduler** *(отложено)* | `@Scheduled` polling 2–5 min | — | Только после стабильного ручного sync |
+| **2.6 REST API** | `GET /api/issues`, `GET /api/issues/{key}` (из БД, не live Jira) — **Done**; `GET /api/sprints/current` — отложен (нет `sprints` persistence) | Scheduler, Board UI, pagination/sorting/filtering | curl → JSON из PostgreSQL |
+| **2.7 Scheduler** | `sync.jira.JiraSyncScheduler` (`SchedulingConfigurer`, `fixedDelay`, `jira.sync.enabled`/`jira.sync.interval`), in-process guard в `JiraSyncService` | `sync_state`, distributed lock, incremental sync, retry framework | **Done** — реализован после стабильного ручного sync |
 
 ### Маппинг Task → Phase
 
@@ -108,7 +109,7 @@ GET /api/issues
   → читает только из PostgreSQL
 ```
 
-Scheduler добавляется **только когда** ручной sync проверен на стенде с реальным token.
+Scheduler добавляется **только когда** ручной sync проверен на стенде с реальным token. **Реализовано** (2026-07-15, `sync.jira.JiraSyncScheduler`) — вызывает тот же `JiraSyncService.syncBoard()`, что и manual endpoint выше; `jira.sync.enabled=false` по умолчанию, включается явно через env; см. [session_log.md](./session_log.md).
 
 Контракт admin endpoint: [api.md](./api.md).
 
@@ -149,3 +150,7 @@ Out of MVP:
 **v2.2 (2026-07-14):** Phase 2 разбита на 2.1–2.5; manual sync перед scheduler.
 
 **v2.3 (2026-07-15):** добавлен блок «Фактический статус фаз» (2.1–2.4 реализованы); зафиксирована разница нумерации — admin-sync endpoint фактически помечен как Phase 2.4, read API/scheduler сдвинуты на 2.5+.
+
+**v2.4 (2026-07-15):** Read API (`GET /api/issues`, `GET /api/issues/{key}`) реализован — Done. `GET /api/sprints/current` явно отложен (архитектурное решение: нет `sprints` persistence, никакого mock/stub/live-Jira substitute); TODO в [discovery.md](./discovery.md). Scheduler — следующий next step.
+
+**v2.5 (2026-07-15):** Scheduler (Phase 2.5 / task 2.7) реализован — Done. `sync.jira.JiraSyncScheduler` вызывает тот же `JiraSyncService.syncBoard()`, что и manual `POST /api/admin/sync/jira`; `fixedDelay` (не `fixedRate`), env-driven `jira.sync.enabled`(default `false`)/`jira.sync.interval`(default `5m`); in-process guard в `JiraSyncService` не даёт manual и scheduled sync запускаться одновременно. `sync_state`/distributed lock/incremental sync/retry framework — не добавлялись. Phase 3 не начата.

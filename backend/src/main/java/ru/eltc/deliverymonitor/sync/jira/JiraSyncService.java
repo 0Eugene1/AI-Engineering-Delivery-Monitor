@@ -23,6 +23,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * First application-level layer over {@link JiraContextProvider} (docs/roadmap.md Phase 2.2
@@ -45,6 +46,14 @@ import java.util.Objects;
  * and the run returns whatever it managed to fetch and persist so far. Database errors from
  * {@link IssuePersistencePort} are <b>not</b> caught here — they are not masked, and the run does
  * not continue past them.
+ *
+ * <p><b>In-process concurrency guard (Phase 2.5):</b> this is the single place both the manual
+ * {@code POST /api/admin/sync/jira} trigger and {@link JiraSyncScheduler} call into, so a simple
+ * in-memory {@link AtomicBoolean} flag here is enough to stop the two from ever running at the
+ * same time — no distributed lock, no {@code sync_state} row, no new HTTP status code. If a call
+ * arrives while a run is already in progress, it is skipped immediately and reported through the
+ * existing {@link JiraSyncResult#errors()} field (the response shape/API contract does not
+ * change); the in-progress run is unaffected and keeps going.
  */
 @Service
 @EnableConfigurationProperties(JiraSyncProperties.class)
@@ -66,6 +75,9 @@ public class JiraSyncService {
     private final IssuePersistencePort persistencePort;
     private final JiraSyncProperties properties;
 
+    /** Guards against a manual and a scheduled sync running at the same time (see class Javadoc). */
+    private final AtomicBoolean syncInProgress = new AtomicBoolean(false);
+
     public JiraSyncService(
             JiraContextProvider contextProvider,
             IssuePersistencePort persistencePort,
@@ -78,8 +90,26 @@ public class JiraSyncService {
     /**
      * Fetches every issue of the observed board (via the configured board filter) and upserts
      * each page into persistence as it is fetched.
+     *
+     * <p>If another run (manual or scheduled) is already in progress, this call is skipped
+     * immediately instead of running concurrently — see the in-process guard note in the class
+     * Javadoc.
      */
     public JiraSyncResult syncBoard() {
+        if (!syncInProgress.compareAndSet(false, true)) {
+            Instant now = Instant.now();
+            log.info("Jira sync already in progress; skipping this run");
+            return new JiraSyncResult(now, now, 0, 0, false, 0, 0,
+                    List.of("Sync already in progress; this run was skipped"));
+        }
+        try {
+            return runSync();
+        } finally {
+            syncInProgress.set(false);
+        }
+    }
+
+    private JiraSyncResult runSync() {
         Instant startedAt = Instant.now();
         int pageSize = properties.getPageSize();
 

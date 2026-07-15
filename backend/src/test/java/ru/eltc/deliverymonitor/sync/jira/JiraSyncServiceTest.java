@@ -18,6 +18,8 @@ import ru.eltc.deliverymonitor.integration.jira.provider.JiraContextProvider;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Unit tests for {@link JiraSyncService} against a fake {@link JiraContextProvider} and a
  * recording {@link IssuePersistencePort} — no real Jira, no HTTP, no database, no Spring context.
  * Covers pagination, per-page persistence (not full-run accumulation), field normalization, the
- * {@code mocked} flag and {@link JiraClientException} handling.
+ * {@code mocked} flag, {@link JiraClientException} handling and the in-process concurrency guard
+ * (Phase 2.5) that stops a manual and a scheduled sync from running at the same time.
  */
 class JiraSyncServiceTest {
 
@@ -207,6 +210,52 @@ class JiraSyncServiceTest {
         assertThat(port.pages()).hasSize(1);
         assertThat(port.pages().get(0)).extracting(IssueUpsertCommand::key)
                 .containsExactly("MPTPSUPP-1", "MPTPSUPP-2");
+    }
+
+    @Test
+    void guardSkipsAConcurrentSyncBoardCallWhileAnotherRunIsInProgress() throws InterruptedException {
+        CountDownLatch firstRunEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstRun = new CountDownLatch(1);
+        JiraContextProvider blockingOnFirstPage = (startAt, maxResults) -> {
+            firstRunEntered.countDown();
+            try {
+                releaseFirstRun.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return new JiraBoardContext(718L, 30532L, startAt, maxResults, 1,
+                    List.of(issue("MPTPSUPP-1", "s")), Instant.now(), false);
+        };
+        RecordingPersistencePort port = new RecordingPersistencePort();
+        JiraSyncService service = new JiraSyncService(blockingOnFirstPage, port, pageSize(50));
+
+        JiraSyncResult[] firstRunResult = new JiraSyncResult[1];
+        Thread firstRun = new Thread(() -> firstRunResult[0] = service.syncBoard());
+        firstRun.start();
+
+        assertThat(firstRunEntered.await(5, TimeUnit.SECONDS))
+                .as("test setup: first run did not reach the provider in time")
+                .isTrue();
+
+        // Second call arrives while the first run is still blocked inside the provider above —
+        // the in-process guard must skip it immediately rather than run concurrently.
+        JiraSyncResult secondRunResult = service.syncBoard();
+        assertThat(secondRunResult.fetched()).isZero();
+        assertThat(secondRunResult.pages()).isZero();
+        assertThat(secondRunResult.errors()).containsExactly("Sync already in progress; this run was skipped");
+        assertThat(port.pages()).isEmpty();
+
+        releaseFirstRun.countDown();
+        firstRun.join(5_000);
+        assertThat(firstRun.isAlive()).isFalse();
+        assertThat(firstRunResult[0].fetched()).isEqualTo(1);
+        assertThat(firstRunResult[0].errors()).isEmpty();
+        assertThat(port.pages()).hasSize(1);
+
+        // The guard is released after a run completes: a third call now runs normally.
+        JiraSyncResult thirdRunResult = service.syncBoard();
+        assertThat(thirdRunResult.errors()).isEmpty();
+        assertThat(thirdRunResult.fetched()).isEqualTo(1);
     }
 
     private static JiraIssueDto issue(String key, String summary) {

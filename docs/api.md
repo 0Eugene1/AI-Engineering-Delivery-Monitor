@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Draft (MVP contract) |
-| **Version** | 2.3 |
+| **Version** | 2.4 |
 | **Style** | REST, JSON |
 | **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md), [security.md](./security.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) |
 
@@ -36,7 +36,9 @@ GET /api/sprints/{id}/board
 
 `board` — issues спринта + workstreams + risk badges + last activity summary.
 
-### Issues
+**Не реализовано** (архитектурное решение перед Read API, 2026-07-15): в текущей persistence-модели нет таблицы `sprints` ([database.md](./database.md) — Planned/future). Запрещено: создавать таблицу `sprints`, делать mock/stub response, возвращать фиктивные данные, получать sprint напрямую из Jira для этого endpoint. TODO: реализовать после появления sprint persistence — см. [discovery.md](./discovery.md).
+
+### Issues (Read API — implemented)
 
 ```
 GET /api/issues
@@ -44,9 +46,38 @@ GET /api/issues/{key}
 GET /api/issues/{key}/timeline
 ```
 
-`GET /api/issues` — список issues **из PostgreSQL** (после sync), не live-запрос в Jira.
+`GET /api/issues` — список issues **из PostgreSQL** (после sync), не live-запрос в Jira. Реализация:
+`api.issue.IssueController` — тонкий HTTP-адаптер, без бизнес-логики; читает через `api.issue.IssueQueryService`
+(read-only, `@Transactional(readOnly = true)`) поверх `domain.issue.IssueRepository`. Зависимость строго
+`PostgreSQL → domain.issue → api.issue`: не использует `sync.jira`/`integration.jira`/`JiraClient`, никаких
+live-запросов в Jira.
 
-`timeline` — упорядоченный список `activity_events` по issue (главный UX).
+`GET /api/issues/{key}` — одна issue по публичному Jira `key` (не `jiraId`, не database id). Если issue с таким
+`key` не персистирована — `404` с телом `{ "error": "Issue not found: ...", "code": "ISSUE_NOT_FOUND" }`
+(формат из "Conventions" выше).
+
+Response — отдельный DTO `IssueResponse` (не JPA entity):
+
+```json
+{
+  "issueKey": "MPTPSUPP-1234",
+  "summary": "Fix the thing",
+  "status": "In Review",
+  "statusCategory": "In Progress",
+  "assigneeUsername": "j.doe",
+  "assigneeDisplayName": "John Doe",
+  "issueType": "Bug",
+  "jiraCreated": "2026-07-01T09:00:00Z",
+  "jiraUpdated": "2026-07-10T12:30:00Z",
+  "fixVersions": ["5.7.27"],
+  "labels": ["backend", "urgent"]
+}
+```
+
+`GET /api/issues` возвращает JSON-массив таких объектов, без pagination/sorting/filtering/search.
+
+`timeline` — упорядоченный список `activity_events` по issue (главный UX). **Не реализовано** — `activity_events`
+ещё не существует ([database.md](./database.md) — Planned).
 
 ### Admin sync (Phase 2.4 — implemented, до scheduler)
 

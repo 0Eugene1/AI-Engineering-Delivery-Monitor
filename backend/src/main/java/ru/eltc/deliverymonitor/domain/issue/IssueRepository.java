@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Spring Data JPA repository for {@link IssueEntity}. Lives directly in {@code domain.issue} —
@@ -14,4 +15,12 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
 
     /** Batch lookup used by page-level upsert to match existing rows by Jira's immutable internal id. */
     List<IssueEntity> findAllByJiraIdIn(Collection<String> jiraIds);
+
+    /**
+     * Looks up a single issue by its public Jira {@code key} (business anchor, ADR-001; physical
+     * column {@code issue_key} — see {@link IssueEntity#getKey()}), for the read API
+     * ({@code api.issue}). Not to be confused with {@link IssueEntity#getJiraId()} (internal Jira
+     * id, upsert matching key) or the database-generated {@link IssueEntity#getId()}.
+     */
+    Optional<IssueEntity> findByKey(String key);
 }

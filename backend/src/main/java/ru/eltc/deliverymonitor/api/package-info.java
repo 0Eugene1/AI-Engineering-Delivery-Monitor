@@ -12,6 +12,9 @@
  *   <li>{@code api.security} — {@link ru.eltc.deliverymonitor.api.security.SecurityConfig} and the
  *       admin Bearer-token filter. Not a full authentication system: see the package's own
  *       Javadoc and ADR-012.</li>
+ *   <li>{@code api.issue} — read-only issue API ({@code GET /api/issues}, {@code GET
+ *       /api/issues/{key}}), depending only on {@code domain.issue} (never {@code sync.jira} or
+ *       {@code integration.jira} — no live Jira calls). See the package's own Javadoc.</li>
  * </ul>
  */
 package ru.eltc.deliverymonitor.api;

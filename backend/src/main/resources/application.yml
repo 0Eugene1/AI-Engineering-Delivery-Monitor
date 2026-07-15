@@ -39,6 +39,13 @@ jira:
   sync:
     # Page size when paginating the board filter search. Operational setting, not hard-coded.
     page-size: ${JIRA_SYNC_PAGE_SIZE:50}
+    # Background scheduler (Phase 2.5, JiraSyncScheduler). Disabled by default — manual sync
+    # (POST /api/admin/sync/jira) stays the only trigger unless explicitly enabled
+    # (docs/roadmap.md "manual sync first").
+    enabled: ${JIRA_SYNC_ENABLED:false}
+    # fixedDelay between the end of one scheduled run and the start of the next (never fixedRate).
+    # Duration string, e.g. "5m", "90s", "PT5M".
+    interval: ${JIRA_SYNC_INTERVAL:5m}
   auth:
     # bearer = Personal Access Token (Authorization: Bearer ...), recommended for Jira Server 8.14+.
     # basic  = HTTP Basic (username + password/PAT). Confirm which one the service account uses

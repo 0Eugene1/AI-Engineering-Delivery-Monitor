@@ -18,6 +18,174 @@
 
 ---
 
+## 2026-07-15 — Phase 2.5 Scheduler implemented: `JiraSyncScheduler` + in-process sync guard
+
+**Stage:** Phase 2.5 «Scheduler» ([roadmap.md](./roadmap.md)) — **реализована** строго по Scheduler Design, принятому перед этим этапом. Manual sync (`POST /api/admin/sync/jira`) остаётся рабочим и неизменным; scheduler переиспользует ровно тот же `JiraSyncService.syncBoard()`, никакого параллельного пути в Jira/БД не появилось. Сознательно **не добавлялись** (явные ограничения задачи): `sync_state` таблица, distributed lock (ShedLock/Redis), incremental sync, retry framework, новый persistence-слой, HTTP `409`, изменение существующего API-контракта.
+
+**Summary:**
+
+Текущий flow (manual sync) не изменился:
+
+```text
+POST /api/admin/sync/jira
+        │
+        ▼
+JiraSyncController
+        │
+        ▼
+JiraSyncService.syncBoard()
+        │
+        ▼
+IssuePersistencePort
+```
+
+Добавлен второй, полностью симметричный, вход в тот же `syncBoard()`:
+
+```text
+JiraSyncScheduler (fixedDelay, jira.sync.enabled)
+        │
+        ▼
+JiraSyncService.syncBoard()  ← та же точка входа, что у manual sync
+        │
+        ▼
+IssuePersistencePort
+```
+
+1. **`sync.jira.JiraSyncScheduler`** (новый класс, пакет `sync.jira`, **не** `api.admin`/`integration.jira`) — единственная ответственность: регистрация задачи по расписанию, логирование результата, обработка ошибок. Реализован через `SchedulingConfigurer#configureTasks(ScheduledTaskRegistrar)`, а не через простую аннотацию `@Scheduled(fixedDelayString = ...)`: задача должна регистрироваться **условно** (только если `jira.sync.enabled=true`) и её интервал — env-driven `Duration` (например `JIRA_SYNC_INTERVAL=5m`), а не compile-time константа, что `@Scheduled` на уровне аннотации не поддерживает без доп. ухищрений. `configureTasks()`: если `jira.sync.enabled=false` — не регистрирует ничего (лог-сообщение, никаких вызовов `ScheduledTaskRegistrar`/`JiraSyncService`); если `true` — регистрирует **ровно один** `ScheduledTaskRegistrar.addFixedDelayTask(Runnable, Duration)` (**не** `addFixedRateTask`) с интервалом из `jira.sync.interval`. `fixedDelay` выбран намеренно: следующий запуск планируется только **после завершения** предыдущего (никогда не может начаться, пока предыдущий ещё выполняется) — `fixedRate` запускал бы задачи по абсолютному расписанию независимо от длительности предыдущего прогона, что для потенциально медленного Jira-запроса неприемлемо. Метод `runScheduledSync()` вызывает `jiraSyncService.syncBoard()` и логирует агрегаты результата (`fetched`/`pages`/`mocked`/`created`/`updated`/`errors`); **любое** исключение, включая непойманное внутри `JiraSyncService` (например ошибка БД, которая туда не перехватывается), логируется здесь и **не** пробрасывается — сбой одного прогона не мешает следующему `fixedDelay`-запуску.
+2. **`@EnableScheduling`** — добавлена на `DeliveryMonitorApplication` (главный класс приложения), включает инфраструктуру `TaskScheduler` Spring целиком; сама активация фактического запуска Jira-задачи остаётся отдельным env-driven решением в `JiraSyncScheduler`/`jira.sync.enabled` — `@EnableScheduling` только включает механизм, не поведение.
+3. **`sync.jira.JiraSyncProperties`** расширен двумя полями (тот же класс, что уже нёс `page-size`, biндинг `jira.sync.*`): `enabled` (`boolean`, default `false`) и `interval` (`java.time.Duration`, default `5m`, `@NotNull`). `application.yml`: `jira.sync.enabled: ${JIRA_SYNC_ENABLED:false}`, `jira.sync.interval: ${JIRA_SYNC_INTERVAL:5m}` — оба env-driven, ничего не хардкожено. По умолчанию (`enabled=false`) — точное соответствие правилу roadmap «manual sync first»: без явного `JIRA_SYNC_ENABLED=true` в env scheduler не активируется вообще, сервис ведёт себя как раньше.
+4. **In-process guard в `sync.jira.JiraSyncService`** — единственное изменение существующего класса. Новое приватное поле `AtomicBoolean syncInProgress`; `syncBoard()` теперь сначала пытается `compareAndSet(false, true)`; если уже `true` (другой прогон — manual или scheduled — уже выполняется), немедленно возвращает `JiraSyncResult` со всеми агрегатами равными нулю и единственным сообщением в `errors()` (`"Sync already in progress; this run was skipped"`) — **без** нового HTTP-статуса `409` и **без** изменения формы `JiraSyncResult` (тот же record, что и раньше, ни одного нового поля). Существующий прогон при этом не прерывается и продолжает выполняться как обычно. Реальная работа синка вынесена в приватный `runSync()`, вызываемый из `syncBoard()` внутри `try { … } finally { syncInProgress.set(false); }` — флаг гарантированно снимается даже при исключении. Это единственная точка защиты от одновременного запуска: и `JiraSyncController` (manual), и `JiraSyncScheduler` (scheduled) вызывают один и тот же `syncBoard()`, поэтому один `AtomicBoolean` внутри сервиса достаточен — распределённая блокировка не нужна (единственный instance приложения, не кластер).
+
+**Не менялись:** `JiraSyncController`/`api.admin` (scheduler не вызывает Controller — обращается напрямую к `JiraSyncService`, как и было решено), `integration.jira`/`JiraClient` (scheduler не обращается к нему напрямую), `JiraSyncResult` (форма/контракт не изменились — только новое смысловое использование существующего поля `errors()` для случая guard-skip), `domain.issue`, Liquibase-схема, `api.security`/`SecurityConfig` (у scheduler нет HTTP-эндпоинта, ничего защищать не нужно).
+
+**Тесты (новые — 5, итог 75, было 70):**
+
+- `JiraSyncSchedulerTest` (4, unit, `JiraSyncService` — Mockito-мок, никакого Spring context/реальной Jira/БД):
+  - `disabledSchedulerRegistersNoTask` — `jira.sync.enabled=false` → `configureTasks()` не вызывает **ни одного** метода mock `ScheduledTaskRegistrar` и не трогает `JiraSyncService` (`verifyNoInteractions` на обоих).
+  - `enabledSchedulerRegistersFixedDelayTaskWithConfiguredInterval` — `enabled=true`, `interval=2m` → ровно один вызов `addFixedDelayTask(any(Runnable), eq(Duration.ofMinutes(2)))`; отдельно проверено, что `addFixedRateTask` **не** вызывается ни разу.
+  - `scheduledRunCallsJiraSyncService` — `runScheduledSync()` вызывает `jiraSyncService.syncBoard()` ровно один раз.
+  - `scheduledRunSwallowsExceptionSoFutureRunsAreNotBroken` — `syncBoard()` бросает `RuntimeException`, `runScheduledSync()` не пробрасывает исключение наружу (тест сам не падает).
+- `JiraSyncServiceTest` (+1 новый — `guardSkipsAConcurrentSyncBoardCallWhileAnotherRunIsInProgress`, итог 9 в файле) — реальная многопоточность (`Thread` + `CountDownLatch`, без mock-таймеров): первый прогон блокируется внутри fake-провайдера на первой странице; второй вызов `syncBoard()` из основного потока, сделанный пока первый ещё «внутри» вызова провайдера, возвращает результат немедленно (`fetched=0`, `pages=0`, `errors()` содержит ровно сообщение про skip), `IssuePersistencePort` при этом не тронут (`port.pages()` пуст); после разблокировки первый прогон завершается штатно (`fetched=1`, `errors()` пуст, страница персистирована); третий вызов после завершения первого снова выполняется штатно (флаг корректно снят в `finally`).
+
+`.\mvnw.cmd clean verify` (JDK 21, Android Studio JBR) — **75 тестов, 0 failures, 0 errors, 2 skipped** (оба — `JiraSmokeTest`, без токена) → `BUILD SUCCESS`.
+
+**Roadmap compliance:**
+
+- Правило «manual sync first» ([roadmap.md](./roadmap.md) Guiding rule) выполнено буквально: scheduler default `disabled`, добавлен **только после** того, как ручной sync уже реализован и покрыт тестами (Phase 2.2–2.4); ничего не переставлялось местами.
+- Прямые ограничения задачи выполнены без отклонений: scheduler не вызывает `Controller`, не вызывает `JiraClient` напрямую, не обходит `JiraSyncService`; `sync_state` не добавлен; distributed lock не добавлен; incremental sync не делался; используется `fixedDelay`, не `fixedRate`; guard не добавляет HTTP `409` и не меняет существующий API-контракт.
+- Фаза помечена «Next» → «Done» в [roadmap.md](./roadmap.md)/[ai_context.md](./ai_context.md); **Phase 3 не начата** — явное ограничение задачи.
+
+**Decisions:**
+
+- **`SchedulingConfigurer` вместо `@Scheduled(fixedDelayString=...)`** — единственная реализационная развилка, не предусмотренная явно в тексте задачи, принята здесь: аннотационная форма `fixedDelayString` не умеет (а) регистрировать задачу условно по `jira.sync.enabled` и (б) принимать значения вида `"5m"` напрямую (Spring резолвит строку либо как ISO-8601 `Duration` через `Duration.parse` (нужен префикс `P`), либо как `long` миллисекунд — `DurationStyle`/суффиксы `5m`/`10s`, которые поддерживает Spring **Boot**-биндинг `@ConfigurationProperties`, аннотация `@Scheduled` не понимает). `SchedulingConfigurer#configureTasks` даёт полный императивный контроль: условная регистрация + `Duration` из уже забинденных `JiraSyncProperties` без дополнительного парсинга строк. Не меняет ни одно из требований задачи (`fixedDelay`, env-driven конфиг, `JiraSyncScheduler` в `sync.jira`) — только способ регистрации задачи внутри самого класса.
+- **Guard возвращает существующую форму `JiraSyncResult` с сообщением в `errors()`**, а не новое поле (`skipped: true`) — при любом добровольном расширении контракта пришлось бы аргументировать, что это действительно ничего не меняет; реюз уже существующего поля `errors()` (тот же приём, что уже применялся для `JiraClientException` в Phase 2.2) держит `JiraSyncResult` буквально без единого изменения состава полей.
+- **`AtomicBoolean` внутри `JiraSyncService`, не отдельный компонент/аспект** — единственный instance приложения (без кластера/нескольких pod'ов, ADR-003 modular monolith), поэтому in-process примитив достаточен; выносить guard в отдельный класс не даёт дополнительной пользы при текущем объёме кода.
+- Новый ADR не создавался — Scheduler Design был согласован (принят) перед этой сессией отдельно; реализация не вводит архитектурных решений сверх уже принятого design (в рамках ADR-001/003/004/006/007/011).
+
+**Docs touched:**
+
+- `docs/roadmap.md` (v2.5 — Scheduler: «Next» → «Done»; фактический статус фаз обновлён)
+- `docs/architecture.md` (v2.5 — `sync.jira` описание дополнено `JiraSyncScheduler`; package dependency direction не изменилось — scheduler зависит от `domain.issue` тем же путём, что и manual sync, через `JiraSyncService`)
+- `docs/ai_context.md` (стадия/версия 2.8 — Scheduler done)
+- `docs/session_log.md` (this entry), `docs/changelog.md`
+
+**Code touched (new):**
+
+- `backend/src/main/java/.../sync/jira/JiraSyncScheduler.java`
+- `backend/src/test/java/.../sync/jira/JiraSyncSchedulerTest.java`
+
+**Code touched (modified):**
+
+- `backend/src/main/java/.../sync/jira/JiraSyncService.java` (in-process guard: `AtomicBoolean syncInProgress`, `syncBoard()`/`runSync()` split)
+- `backend/src/main/java/.../sync/jira/JiraSyncProperties.java` (+ `enabled`, `interval`)
+- `backend/src/main/java/.../sync/jira/package-info.java` (scheduler больше не «out of scope»)
+- `backend/src/main/java/.../DeliveryMonitorApplication.java` (+ `@EnableScheduling`)
+- `backend/src/main/resources/application.yml` (`jira.sync.enabled`, `jira.sync.interval`)
+- `backend/src/test/java/.../sync/jira/JiraSyncServiceTest.java` (+1 guard test)
+
+**Остающиеся ограничения (сознательно, по прямому решению задачи):**
+
+1. **`sync_state` не добавлен** — нет watermark/cursor персистентности; каждый прогон (manual или scheduled) — full-refresh постраничный upsert по `jiraId`, как и раньше (Phase 2.3). Incremental sync по `updated` — отдельная будущая задача.
+2. **Distributed lock не добавлен** — guard работает только в рамках одного instance приложения (`AtomicBoolean`); если/когда появится несколько инстансов за балансировщиком, потребуется отдельное решение (ShedLock/Redis/DB-lock) — не в этом MVP (ADR-006 «no broker/Redis in MVP»).
+3. **Retry framework не добавлен** — ошибка scheduled-прогона логируется и просто ждёт следующего `fixedDelay`-тика; нет экспоненциальных backoff/повторов внутри одного прогона.
+4. **Реальный прогон scheduler против настоящей Jira не выполнялся** — та же причина, что и в предыдущих записях: `JIRA_TOKEN` недоступен в этой среде. Проверено только через юнит-тесты (fake provider, Mockito) — офлайн, без реального Jira/PostgreSQL/HTTP.
+5. **Phase 3 не начата** — явное ограничение этой сессии.
+
+**Next:**
+
+1. Получить реальный `JIRA_TOKEN`, включить `JIRA_SYNC_ENABLED=true` на стенде и подтвердить фоновый sync на реальных данных — тот же открытый `TODO`, что и в предыдущих записях, плюс новый пункт для scheduler.
+2. Phase 3 «GitLab + Timeline» — по [roadmap.md](./roadmap.md), первая ценность проекта. Не начинать без явного go-ahead.
+
+---
+
+## 2026-07-15 — Read API implemented: `GET /api/issues`, `GET /api/issues/{key}`
+
+**Stage:** «Read API» ([roadmap.md](./roadmap.md), Phase 2.4/2.5 по нумерации плановых таблиц; ранее размечено как «Next» после Phase 2.4 Admin Sync HTTP API) — **реализована** строго по дизайну, зафиксированному в архитектурном review перед этим этапом (см. ограничения ниже). Сознательно **не реализован** `GET /api/sprints/current` (явное решение review — нет `sprints` persistence). Никаких mock/stub/live-Jira substitute для sprint endpoint не добавлялось.
+
+**Summary:**
+
+Новый пакет `ru.eltc.deliverymonitor.api.issue` — read-only HTTP слой поверх `domain.issue`, без единого обращения к `sync.jira`/`integration.jira`/`JiraClient`:
+
+1. **`IssueController`** (`@RestController`, `/api/issues`) — чистый HTTP-адаптер, без бизнес-логики:
+   - `GET /api/issues` — все persisted issues из PostgreSQL (без pagination/sorting/filtering).
+   - `GET /api/issues/{key}` — одна issue по публичному Jira `key` (`issue_key`); при отсутствии — `404` с телом `{ "error": "...", "code": "ISSUE_NOT_FOUND" }` (формат из `docs/api.md` "Conventions").
+2. **`IssueQueryService`** (`@Service`, класс аннотирован `@Transactional(readOnly = true)`) — read-слой: грузит `IssueEntity` через `IssueRepository` и маппит в `IssueResponse` **внутри** транзакции, пока LAZY `@ElementCollection` (`fixVersions`/`labels`) ещё доступны — иначе `LazyInitializationException` вне сессии.
+3. **`IssueResponse`** (record, DTO) — `issueKey, summary, status, statusCategory, assigneeUsername, assigneeDisplayName, issueType, jiraCreated, jiraUpdated, fixVersions, labels`. Entity `IssueEntity` **не** отдаётся напрямую — ни `jiraId`, ни database `id` не попадают в контракт.
+4. **`ErrorResponse`** (record) — `{ error, code }`, тело `404`-ответа.
+5. **`IssueRepository`** расширен одним методом — `findByKey(String key)` (Optional), поиск по бизнес-якорю (`key`/`issue_key`), не по `jiraId` и не по database id. `findAllByJiraIdIn` (Phase 2.3) не тронут.
+
+Зависимость строго `PostgreSQL → domain.issue → api.issue` (docs/architecture.md): `api.issue` импортирует только `IssueEntity`/`IssueRepository` из `domain.issue`; `sync.jira`, `integration.jira`, `JiraClient`, `JiraSyncService`, `api.admin.JiraSyncController`, `api.security.SecurityConfig` — **не изменены**. `/api/issues/**` остаётся под существующим `anyRequest().permitAll()` в `SecurityConfig` (открыт внутри VPN, как и было до этого этапа) — security baseline не менялся.
+
+**Тесты (новые — 7, итог 70, было 63):**
+
+- `IssueControllerTest` (3, `@WebMvcTest(IssueController.class)` + `@Import(SecurityConfig.class)`, mock `IssueQueryService` — без реальной БД): `GET /api/issues` → `200` со списком; `GET /api/issues/{key}` → `200` для существующего key; `GET /api/issues/{unknown}` → `404` с телом `{error, code: "ISSUE_NOT_FOUND"}`.
+- `IssueQueryServiceIntegrationTest` (3, `@DataJpaTest` + `@AutoConfigureTestDatabase(replace=NONE)` против настоящего Liquibase-changeset `0002-issues.yaml` на файловом H2 в режиме PostgreSQL, `@Import({IssueUpsertService, IssueQueryService})` — тот же приём, что в `IssueUpsertServiceIntegrationTest`): `findAll()` маппит несколько persisted issues в `IssueResponse`, включая **реальную** LAZY-загрузку `fixVersions`/`labels` (не мок) — тест провалился бы с `LazyInitializationException`, если бы сервис не был `@Transactional(readOnly = true)`; `findByKey()` находит существующий key; `findByKey()` возвращает `Optional.empty()` для неизвестного key.
+- `DeliveryMonitorApplicationTests` (+1, полный контекст на H2): `issuesEndpointIsPubliclyAccessibleAndReadsFromPostgres` — `GET /api/issues` без `Authorization` header → `200` с `[]` (пустая схема), подтверждает, что security baseline для read-эндпоинтов не изменился этим этапом.
+
+`.\mvnw.cmd clean verify` (JDK 21, Android Studio JBR) — **70 тестов, 0 failures, 0 errors, 2 skipped** (оба — `JiraSmokeTest`, без токена) → `BUILD SUCCESS`.
+
+**Ограничения (по прямому решению архитектурного review перед этим этапом):**
+
+- **`GET /api/sprints/current` не реализован.** Причина: в текущей persistence-модели нет таблицы `sprints` (`docs/database.md` — «Planned / future», отложено с Phase 2.3: board 718 — Kanban, sprint metadata из Jira ещё нет). Запрещено и не сделано: создавать таблицу `sprints`; делать mock/stub response; возвращать фиктивные данные; получать sprint напрямую из Jira для этого endpoint. TODO зафиксирован в `docs/discovery.md` — sprint API реализуется после появления sprint persistence.
+- **Никаких pagination/sorting/filtering/search** — оба endpoint возвращают данные как есть.
+- **Не менялись:** `JiraSyncService`, `JiraClient`, `api.admin.JiraSyncController` (Admin Sync API), `api.security.SecurityConfig`/`AdminTokenAuthenticationFilter`/`AdminTokenProperties` (security baseline), существующий sync flow, Liquibase-схема (использована уже существующая `0002-issues.yaml`, новых миграций не добавлено).
+- Без live-запросов в Jira из `api.issue` — оба endpoint читают исключительно PostgreSQL через `domain.issue`.
+
+**Decisions:**
+
+- Архитектура не менялась относительно решений, зафиксированных в review перед этим этапом (дальнейшая детализация уже принятых ADR-001/003/011, без нового ADR): владение DTO/read-слоем — `api.issue`, а не `domain.issue`, чтобы entity/persistence-слой не знал о внешнем HTTP-контракте; поиск по `key`, не `jiraId`/id — единственный публичный якорь для внешнего клиента (ADR-001).
+- `IssueQueryService` размещён в `api.issue` (не в `domain.issue`) — согласно диаграмме review `PostgreSQL → domain.issue → api.issue`: `domain.issue` предоставляет только entity/repository, маппинг Entity→DTO и его read-only транзакционная граница — обязанность API-слоя.
+- `@Transactional(readOnly = true)` на уровне класса `IssueQueryService`, а не отдельных методов — оба метода read-only, дублировать аннотацию на каждом не нужно.
+
+**Docs touched:**
+
+- `docs/architecture.md` (пакет `api.issue` в «Backend packages», package-info ссылки)
+- `docs/api.md` (endpoints `GET /api/issues`/`GET /api/issues/{key}` помечены implemented; `GET /api/sprints/current` — явный TODO с причиной)
+- `docs/database.md` (примечание: `sprints` TODO уточнён — блокирует sprint API)
+- `docs/discovery.md` (TODO: sprint API endpoint ждёт sprint persistence)
+- `docs/ai_context.md` (стадия/версия — Read API done)
+- `docs/roadmap.md` (статус фаз — Read API done, sprint endpoint отложен)
+- `docs/session_log.md` (this entry), `docs/changelog.md`
+
+**Code touched (new):**
+
+- `backend/src/main/java/.../api/issue/{IssueController,IssueQueryService,IssueResponse,ErrorResponse,package-info}.java`
+- `backend/src/test/java/.../api/issue/{IssueControllerTest,IssueQueryServiceIntegrationTest}.java`
+
+**Code touched (modified):**
+
+- `backend/src/main/java/.../domain/issue/IssueRepository.java` (+ `findByKey(String)`)
+- `backend/src/main/java/.../api/package-info.java` (упомянут `api.issue`)
+- `backend/src/test/java/.../DeliveryMonitorApplicationTests.java` (+1 тест — публичный доступ к `/api/issues`)
+
+**Next:**
+
+1. `GET /api/sprints/current` — только после появления sprint persistence (новая таблица `sprints`, Liquibase-миграция, дизайн matching key). Не начинать без явного go-ahead.
+2. Phase 2.5+ scheduler (`@Scheduled` polling) — по [roadmap.md](./roadmap.md), не начинать в этой сессии (по прямому ограничению задачи).
+3. Получить реальный `JIRA_TOKEN` и `DELIVERY_MONITOR_ADMIN_TOKEN` — тот же открытый `TODO`, что и в предыдущих записях.
+
+---
+
 ## 2026-07-15 — Phase 2.4 Admin Sync HTTP API implemented
 
 **Stage:** Phase 2.4 «Admin Sync HTTP API» ([roadmap.md](./roadmap.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)) — **реализована** по согласованному дизайну (ADR-012 Decision, ранее задокументировано в Design notes). Первый HTTP-controller и первый security-слой в проекте. Сознательно **не добавлялись** (явные ограничения задачи): OIDC/JWT/LDAP, `User`/`Role` entity, `UserRepository`, principal model, permissions, UI, scheduler, webhook security, audit database, incremental sync, async execution, retry.

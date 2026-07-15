@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.3 |
+| **Version** | 2.5 |
 | **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md), [security.md](./security.md) |
 
 ## Overview
@@ -60,12 +60,22 @@ integration.jira  →  sync.jira  →  domain.issue
 
 `api.admin` зависит на `sync.jira` (вызывает `JiraSyncService.syncBoard()` и реюзает `JiraSyncResult` как HTTP response), но ничего не знает про `domain.issue`/`integration.jira` напрямую. `api.security` не зависит ни от одного бизнес-пакета — это чистый HTTP-уровень (Servlet filter + Spring Security config), не знающий про Jira/issues.
 
+`sync.jira.JiraSyncScheduler` (Phase 2.5) — второй, полностью симметричный вызывающий той же точки входа `JiraSyncService.syncBoard()`; живёт **внутри** `sync.jira` (не в `api.admin`, не в `integration.jira`), не вводит новой зависимости и не обходит `JiraSyncService`. Ни `api.admin.JiraSyncController`, ни `sync.jira.JiraSyncScheduler` не зависят друг от друга — оба зависят только на `JiraSyncService`.
+
+`api.issue` (Read API) зависит **только** на `domain.issue` (`IssueEntity`/`IssueRepository`) — не на `sync.jira`, не на `integration.jira`, не на `JiraClient`. Это отдельная от `api.admin` ветвь зависимостей:
+
+```
+PostgreSQL  →  domain.issue  →  api.issue
+```
+
+`domain.issue` не знает о существовании `api.issue`, как не знает и о `sync.jira` — оно лишь предоставляет `IssueEntity`/`IssueRepository`; маппинг Entity → внешний DTO (`IssueResponse`) — обязанность `api.issue.IssueQueryService`, а не `domain.issue`.
+
 ## Backend packages
 
 | Package | Responsibility | MVP |
 |---|---|---|
 | `integration.jira` | HTTP-клиент + auth + wire DTO + `JiraContextProvider` (только integration layer) | Yes |
-| `sync.jira` | Application layer: `JiraSyncService` (оркестрация sync поверх `JiraContextProvider`, постраничная пагинация, нормализация в `JiraIssueSnapshot` — собственный контракт слоя), `JiraSyncResult` (агрегаты прогона) | Yes |
+| `sync.jira` | Application layer: `JiraSyncService` (оркестрация sync поверх `JiraContextProvider`, постраничная пагинация, нормализация в `JiraIssueSnapshot` — собственный контракт слоя), `JiraSyncResult` (агрегаты прогона). `JiraSyncScheduler` (Phase 2.5, **реализовано**) — фоновый вход в тот же `JiraSyncService.syncBoard()`, что и manual `POST /api/admin/sync/jira`: `SchedulingConfigurer`, условная регистрация по `jira.sync.enabled` (default `false`), `ScheduledTaskRegistrar.addFixedDelayTask` (не `fixedRate`) с интервалом `jira.sync.interval` (default `5m`). `JiraSyncService` несёт in-process guard (`AtomicBoolean`) — второй одновременный вызов `syncBoard()` (manual или scheduled) пропускается, не меняя форму `JiraSyncResult` | Yes |
 | `integration.gitlab` | Poll/webhook: branches, commits, MR, notes | Yes |
 | `integration.jenkins` | Poll/webhook: builds | Yes |
 | `domain.issue` | Issue + sprint + fixVersion. Persistence-слой (Phase 2.3, реализовано) — единственный владелец своих контрактов: `IssueEntity`, `IssueRepository`, `IssuePersistencePort` (+ `IssueUpsertCommand`, `IssueUpsertOutcome`), `IssueUpsertService` | Yes |
@@ -75,7 +85,7 @@ integration.jira  →  sync.jira  →  domain.issue
 | `domain.activity` | Командный activity feed | Yes |
 | `domain.release` | Release Health по fixVersion | Yes |
 | `domain.risk` | Правила рисков | Yes |
-| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, без бизнес-логики, реюзает `JiraSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) | Yes |
+| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, без бизнес-логики, реюзает `JiraSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API, **реализовано**: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`, тонкий HTTP-адаптер), `IssueQueryService` (read-only, `@Transactional(readOnly = true)`, маппинг `IssueEntity → IssueResponse`), `IssueResponse`/`ErrorResponse` (DTO). Зависит только от `domain.issue` — без `sync.jira`/`integration.jira`/`JiraClient`, без live Jira. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
 | AI Summary service | REST → LLM → markdown | After MVP |
 
 ## Core abstractions

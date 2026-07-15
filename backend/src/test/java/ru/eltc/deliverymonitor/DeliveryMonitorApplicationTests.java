@@ -93,4 +93,17 @@ class DeliveryMonitorApplicationTests {
 
         assertThat(response.getStatusCode().value()).isEqualTo(401);
     }
+
+    @Test
+    void issuesEndpointIsPubliclyAccessibleAndReadsFromPostgres() {
+        // Read API (docs/api.md "Conventions"): GET /api/** stays open within the VPN perimeter,
+        // unlike /api/admin/**. Security baseline is unchanged by this endpoint. Against the
+        // empty H2 schema this simply returns an empty list — no real Jira/PostgreSQL data.
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response =
+                restTemplate.getForEntity("http://localhost:" + port + "/api/issues", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).isEqualTo("[]");
+    }
 }
