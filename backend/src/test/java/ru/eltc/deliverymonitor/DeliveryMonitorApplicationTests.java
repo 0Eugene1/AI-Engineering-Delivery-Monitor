@@ -40,6 +40,10 @@ class DeliveryMonitorApplicationTests {
         // (no secrets committed). This placeholder is not a real credential — it only lets
         // the full application context start for this smoke test; no Jira call is made here.
         registry.add("jira.auth.token", () -> "test-only-placeholder-token");
+        // Same fail-fast pattern for the admin Bearer token (Phase 2.4, ADR-012) — placeholder
+        // only, not a real secret; adminSyncJiraRequiresAuthentication below never presents it,
+        // so it never reaches JiraSyncService (no real Jira/PostgreSQL call from this test).
+        registry.add("delivery-monitor.admin.token", () -> "test-only-placeholder-admin-token");
     }
 
     private static Path tempDbFile() {
@@ -64,5 +68,29 @@ class DeliveryMonitorApplicationTests {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).contains("\"status\":\"UP\"");
+    }
+
+    @Test
+    void adminSyncJiraRequiresAuthentication() {
+        // No Authorization header is sent, so Spring Security rejects the request with 401
+        // before it ever reaches JiraSyncController/JiraSyncService — no real Jira or PostgreSQL
+        // call happens here (Phase 2.4, ADR-012).
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                "http://localhost:" + port + "/api/admin/sync/jira", null, String.class);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+    }
+
+    @Test
+    void actuatorInfoRequiresAuthenticationButHealthDoesNot() {
+        // ADR-012 endpoint policy: only /actuator/health (already covered by
+        // actuatorHealthReturnsUp above) is public; every other actuator endpoint — e.g. /info,
+        // which can leak build/configuration details — requires the admin token.
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response =
+                restTemplate.getForEntity("http://localhost:" + port + "/actuator/info", String.class);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
     }
 }

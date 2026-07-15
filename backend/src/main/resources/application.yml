@@ -47,6 +47,14 @@ jira:
     username: ${JIRA_USERNAME:}
     token: ${JIRA_TOKEN:}
 
+# Minimal admin auth baseline (Phase 2.4, ADR-012). Gates POST /api/admin/** with a static Bearer
+# token — stateless check, no user identity is derived from it (docs/security.md §2, §7).
+# DELIVERY_MONITOR_ADMIN_TOKEN is a separate secret from JIRA_TOKEN (different trust boundaries,
+# see ADR-012) and, like it, has no default value: never committed, fail-fast if unset.
+delivery-monitor:
+  admin:
+    token: ${DELIVERY_MONITOR_ADMIN_TOKEN:}
+
 management:
   endpoints:
     web:

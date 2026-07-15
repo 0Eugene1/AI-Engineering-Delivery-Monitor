@@ -33,6 +33,15 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!--
+            Minimal enforcement layer for /api/admin/** (Phase 2.4, ADR-012): static Bearer
+            admin-token check only. No JWT, no OAuth2 Resource Server, no OIDC, no LDAP.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
         <!-- Bean Validation (JSR-380) for @ConfigurationProperties fail-fast checks, e.g. JiraProperties -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -71,6 +80,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- MockMvc + Spring Security test support (with(SecurityMockMvcRequestPostProcessors...)) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- Docker-free smoke test for context/Liquibase wiring (PostgreSQL compatibility mode) -->

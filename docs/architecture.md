@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.2 |
+| **Version** | 2.3 |
 | **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md), [security.md](./security.md) |
 
 ## Overview
@@ -58,6 +58,8 @@ integration.jira  →  sync.jira  →  domain.issue
 
 `sync.jira` зависит от `domain.issue` (вызывает `IssuePersistencePort`), но `domain.issue` ничего не импортирует из `sync.jira` — свой входной контракт (`IssueUpsertCommand`) он определяет сам; маппинг из `JiraIssueSnapshot` делает вызывающая сторона (`sync.jira`). Тот же принцип действует на границе `integration.jira → sync.jira` (`JiraContextProvider` — контракт integration-слоя, `sync.jira` от него зависит). См. [decisions.md](./decisions.md) (Design notes, 2026-07-15 — Phase 2.3 Persistence).
 
+`api.admin` зависит на `sync.jira` (вызывает `JiraSyncService.syncBoard()` и реюзает `JiraSyncResult` как HTTP response), но ничего не знает про `domain.issue`/`integration.jira` напрямую. `api.security` не зависит ни от одного бизнес-пакета — это чистый HTTP-уровень (Servlet filter + Spring Security config), не знающий про Jira/issues.
+
 ## Backend packages
 
 | Package | Responsibility | MVP |
@@ -73,7 +75,7 @@ integration.jira  →  sync.jira  →  domain.issue
 | `domain.activity` | Командный activity feed | Yes |
 | `domain.release` | Release Health по fixVersion | Yes |
 | `domain.risk` | Правила рисков | Yes |
-| `api` | REST controllers + минимальный security enforcement (Spring Security scoped: Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)) | Yes |
+| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, без бизнес-логики, реюзает `JiraSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) | Yes |
 | AI Summary service | REST → LLM → markdown | After MVP |
 
 ## Core abstractions

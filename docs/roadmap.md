@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.2 |
+| **Version** | 2.3 |
 | **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md), [discovery.md](./discovery.md) |
 
 ## Guiding rule
@@ -13,6 +13,26 @@
 **Первая ценность — этап 3** (GitLab + Issue Timeline).
 
 **Правило Jira (Phase 2):** сначала **ручной sync** (`POST /api/admin/sync/jira`), потом scheduler. Не начинать с фонового polling.
+
+---
+
+## Фактический статус фаз (по коду, на 2026-07-15)
+
+> Таблицы плана ниже — исходная разбивка. Ниже — что **реально реализовано** в коде (см. [ai_context.md](./ai_context.md) §2, [session_log.md](./session_log.md)).
+
+| Фаза | Статус |
+|---|---|
+| 0. Discovery | Done |
+| 1. Skeleton (Spring Boot + PostgreSQL + Liquibase + Actuator) | Done |
+| 2.1 Jira Client (REST-клиент + auth) | Done |
+| 2.2 Jira Sync — application layer (`sync.jira`: `JiraSyncService`/`JiraSyncResult`/`JiraIssueSnapshot`) | Done |
+| 2.3 Persistence (`domain.issue`, Liquibase `issues`/`issue_fix_versions`/`issue_labels`; `sprints`/`sync_state` отложены) | Done |
+| Admin Sync HTTP API — `POST /api/admin/sync/jira` + минимальный security-baseline (`api.admin`/`api.security`, Bearer admin-token, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)) | Done — помечено «Phase 2.4» в [ai_context.md](./ai_context.md)/[session_log.md](./session_log.md) |
+| Read API (`GET /api/issues`, `GET /api/sprints/current`) | **Next** |
+| Scheduler (`@Scheduled` polling) | Планируется после read API |
+| Phase 3+ (GitLab / Jenkins / Timeline / Release Health / AI Summary) | Не начаты |
+
+**Замечание по нумерации:** в плановых таблицах ниже endpoint `POST /api/admin/sync/jira` отнесён к Phase 2.2, а «REST API» (read) — к Phase 2.4. Фактически admin-sync endpoint был выделен в **отдельный** шаг и во всей остальной документации помечен как **Phase 2.4**; read API и scheduler, соответственно, сдвинулись на Phase 2.5+.
 
 ---
 
@@ -127,3 +147,5 @@ Out of MVP:
 При сдвиге приоритетов или scope обновляйте этот файл и при необходимости [vision.md](./vision.md) / [ux.md](./ux.md) / [api.md](./api.md).
 
 **v2.2 (2026-07-14):** Phase 2 разбита на 2.1–2.5; manual sync перед scheduler.
+
+**v2.3 (2026-07-15):** добавлен блок «Фактический статус фаз» (2.1–2.4 реализованы); зафиксирована разница нумерации — admin-sync endpoint фактически помечен как Phase 2.4, read API/scheduler сдвинуты на 2.5+.

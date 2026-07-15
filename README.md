@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| **Status** | Phase 2.4 — REST API (next) |
-| **Done** | 2.1 Jira Client · 2.2 Jira Sync · 2.3 Persistence |
+| **Status** | Phase 2.4 — Admin Sync HTTP API done; read API next |
+| **Done** | 2.1 Jira Client · 2.2 Jira Sync · 2.3 Persistence · 2.4 Admin Sync HTTP API |
 | **Team** | 9 people: 7 developers + 2 QA |
-| **Concept version** | 2.5 |
-| **App code** | Backend: Jira client + board provider + sync + DB upsert ([backend/](./backend/)); no REST API / scheduler / Spring Security / frontend / GitLab / Jenkins yet |
+| **Concept version** | 2.6 |
+| **App code** | Backend: Jira client + board provider + sync + DB upsert + admin sync REST endpoint (`POST /api/admin/sync/jira`) + Spring Security baseline ([backend/](./backend/)); no read API (`GET /api/issues`) / scheduler / frontend / GitLab / Jenkins yet |
 
 ---
 
@@ -68,7 +68,7 @@ Monitor — read-only проекция поверх существующих и�
 
 Детали: [docs/roadmap.md](./docs/roadmap.md).
 
-**Сейчас:** Phase 2.1–2.3 завершены (Jira client, sync orchestration, PostgreSQL persistence). Следующий шаг — **Phase 2.4** REST API (`POST /api/admin/sync/jira`, `GET /api/issues`) и минимальный Spring Security baseline ([ADR-012](./docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)).
+**Сейчас:** Phase 2.1–2.4 завершены (Jira client, sync orchestration, PostgreSQL persistence, admin sync REST endpoint `POST /api/admin/sync/jira` + минимальный Spring Security baseline — [ADR-012](./docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)). Следующий шаг — read API (`GET /api/issues`, `GET /api/sprints/current`) и Phase 2.5 scheduler.
 
 ---
 
@@ -77,7 +77,7 @@ Monitor — read-only проекция поверх существующих и�
 ```text
 AI-Engineering-Delivery-Monitor/
 ├── docs/                 # Source of Truth (Markdown + ADR)
-├── backend/              # Spring Boot — Jira integration, sync, domain.issue
+├── backend/              # Spring Boot — Jira integration, sync, domain.issue, api (admin/security)
 ├── frontend/             # React UI (not started)
 ├── docker/               # Compose / local Postgres
 ├── scripts/              # Dev/ops helpers

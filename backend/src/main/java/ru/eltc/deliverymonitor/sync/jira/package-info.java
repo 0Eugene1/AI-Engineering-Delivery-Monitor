@@ -16,9 +16,11 @@
  * domain.issue} — this package depends on {@code domain.issue}'s contracts, never the reverse (see
  * docs/architecture.md "Package dependency direction").
  *
- * <p><b>Deliberately out of scope in this phase</b> (docs/roadmap.md): the {@code POST
- * /api/admin/sync/jira} REST controller (Phase 2.4), {@code sprints}/{@code sync_state} tables,
- * incremental sync by {@code updated}, the {@code @Scheduled} poller (Phase 2.5), Spring Security,
- * and GitLab/Jenkins.
+ * <p>The {@code POST /api/admin/sync/jira} REST controller (Phase 2.4) lives in {@code
+ * ru.eltc.deliverymonitor.api.admin} and calls {@link
+ * ru.eltc.deliverymonitor.sync.jira.JiraSyncService#syncBoard()} directly — this package itself
+ * stays HTTP-agnostic. <b>Deliberately out of scope</b> (docs/roadmap.md): {@code sprints}/{@code
+ * sync_state} tables, incremental sync by {@code updated}, the {@code @Scheduled} poller (Phase
+ * 2.5), and GitLab/Jenkins.
  */
 package ru.eltc.deliverymonitor.sync.jira;

@@ -18,6 +18,71 @@
 
 ---
 
+## 2026-07-15 — Phase 2.4 Admin Sync HTTP API implemented
+
+**Stage:** Phase 2.4 «Admin Sync HTTP API» ([roadmap.md](./roadmap.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)) — **реализована** по согласованному дизайну (ADR-012 Decision, ранее задокументировано в Design notes). Первый HTTP-controller и первый security-слой в проекте. Сознательно **не добавлялись** (явные ограничения задачи): OIDC/JWT/LDAP, `User`/`Role` entity, `UserRepository`, principal model, permissions, UI, scheduler, webhook security, audit database, incremental sync, async execution, retry.
+
+**Summary:**
+
+Перед реализацией проверена текущая структура: package root `ru.eltc.deliverymonitor`, `DeliveryMonitorApplication` (обычный `@SpringBootApplication`, без существующих `@Configuration` security-классов), `application.yml` (env-driven конфиг по образцу `jira.*`), `backend/pom.xml` (`spring-boot-starter-security` отсутствовал — добавлен). Никакого `api`-пакета и контроллеров в коде не было — реализация с нуля, без параллельной архитектуры.
+
+1. **`api.admin.JiraSyncController`** — `POST /api/admin/sync/jira`. Чистый HTTP-адаптер: принимает запрос, вызывает `sync.jira.JiraSyncService#syncBoard()`, возвращает его `JiraSyncResult` как есть (`ResponseEntity.ok(result)`) — без отдельного response DTO (реюз существующего application-layer контракта) и без бизнес-логики в контроллере. Без request body — фильтр/страница берутся из конфига (`jira.default-filter-id`, `jira.sync.page-size`), как и было в `JiraSyncService` до этой задачи.
+2. **`api.security` (новый пакет):**
+   - **`AdminTokenProperties`** — `delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, `@Validated`/`@NotBlank`, тот же fail-fast паттерн, что у `JiraProperties.Auth#token` (`JIRA_TOKEN`).
+   - **`AdminTokenAuthenticationFilter`** — `OncePerRequestFilter`. Читает `Authorization` header, проверяет префикс `Bearer `, сравнивает токен с конфигом константным по времени сравнением (`MessageDigest.isEqual`). При совпадении кладёт в `SecurityContextHolder` generic `Authentication` с единственной authority `ROLE_ADMIN` и principal-заглушкой `"admin-token"` — **никакой** идентичности из токена не извлекается (stateless, как и требовалось). Пустой/blank сконфигурированный токен никогда не аутентифицирует даже пустой предъявленный токен (защита от вырождения «токен не задан → доступ открыт всем»). Сам токен (ни предъявленный, ни ожидаемый) не логируется ни при успехе, ни при отказе.
+   - **`SecurityConfig`** (`@EnableWebSecurity`) — `SecurityFilterChain`: `/actuator/health` открыт; `/api/admin/**` **и** любой другой `/actuator/**` (в т.ч. `/actuator/info` — раскрывает build-конфигурацию) требуют аутентификации; остальное не тронуто (`anyRequest().permitAll()` — read-эндпоинтов пока нет). CSRF отключён и sessions — `STATELESS` (machine-to-machine Bearer, не браузерная сессия). Отказ аутентификации → `401` через `HttpStatusEntryPoint`, не redirect на login. Фильтр подключён `addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)`. Никакого `JWT`/`OAuth2ResourceServer`/`OIDC`/`LDAP`.
+3. **`backend/pom.xml`** — добавлены `spring-boot-starter-security` (main) и `spring-security-test` (test, `@MockitoBean`/MockMvc).
+4. **`application.yml`** — `delivery-monitor.admin.token: ${DELIVERY_MONITOR_ADMIN_TOKEN:}` (пустой default — секрет не коммитится, fail-fast при старте без него).
+
+**Тесты (новые — 14, итог 63, было 49):**
+
+- `AdminTokenAuthenticationFilterTest` (6, unit, без Spring context): корректный Bearer → authenticated с `ROLE_ADMIN`; без header; неверный токен; не-Bearer схема (`Basic`); пустой Bearer-токен; пустой сконфигурированный токен никогда не матчит.
+- `AdminTokenPropertiesTest` (3): биндинг значения, fail-fast при отсутствии/blank токене (по образцу `JiraPropertiesTest`).
+- `JiraSyncControllerTest` (3, `@WebMvcTest(JiraSyncController.class)` + `@Import(SecurityConfig.class)`, mock `JiraSyncService` — без реальной Jira/PostgreSQL): 200 + тело `JiraSyncResult` с верным токеном; 401 без header; 401 с неверным токеном; во всех отрицательных случаях `verifyNoInteractions(jiraSyncService)`.
+- `DeliveryMonitorApplicationTests` (+2, полный контекст на H2, без реальной Jira/PostgreSQL): `adminSyncJiraRequiresAuthentication` (401 без header — до контроллера/сервиса запрос не доходит) и `actuatorInfoRequiresAuthenticationButHealthDoesNot` (401 на `/actuator/info`, health по-прежнему открыт). Добавлен placeholder `delivery-monitor.admin.token` в `@DynamicPropertySource` (аналогично `jira.auth.token`).
+
+`.\mvnw.cmd clean verify` (JDK 21, Android Studio JBR) — **63 теста, 0 failures, 0 errors, 2 skipped** (оба — `JiraSmokeTest`, без токена) → `BUILD SUCCESS`.
+
+**Deviations from the agreed design (обнаружено при реализации, зафиксировано явно):**
+
+- **Endpoint policy для actuator сужена до буквы, не только по духу.** Согласованный дизайн ADR-012 говорит «actuator, кроме `health`/liveness — Protected»; при реализации это явно закодировано как отдельное правило `.requestMatchers("/actuator/**").authenticated()` **после** `/actuator/health`, а не оставлено на volume «остальное не трогаем» (`anyRequest().permitAll()`) — иначе `/actuator/info` (build info, потенциально раскрывает конфигурацию) остался бы публичным по умолчанию, что противоречило бы явной строке ADR-012's endpoint policy table. Не расширяет и не сужает сам ADR — только более строгая буквальная реализация уже согласованного правила.
+- **Response не содержит производного поля `saved`.** `JiraSyncResult.saved()` — Java-метод (derived, `created + updated`), не record-компонент, поэтому Jackson его не сериализует в JSON. `docs/api.md`'s более ранний response-sketch показывал `saved` как поле — исправлено на фактическую форму (`startedAt`/`finishedAt`/`fetched`/`pages`/`mocked`/`created`/`updated`/`errors`); `saved` в JSON **не появляется**, клиент может посчитать сумму сам при необходимости. Не решение, а исправление устаревшего sketch под уже принятый (Phase 2.3) контракт `JiraSyncResult`.
+- Остальное реализовано **без отклонений** от ADR-012 Decision: владение контрактами (`JiraSyncController` реюзает `JiraSyncResult`, не вводит DTO), разделение токенов (`DELIVERY_MONITOR_ADMIN_TOKEN` ≠ `JIRA_TOKEN`), fail-fast на отсутствующий admin-токен, stateless-модель без identity/User/Role/permissions, отсутствие JWT/OAuth2/OIDC/LDAP.
+
+**Decisions:**
+
+- Архитектура не менялась — реализация строго в рамках ADR-012 Decision (см. предыдущие Design notes записи). Новый ADR не создавался.
+- Endpoint-policy строгая буквальная трактовка actuator-правила — реализационная деталь, задокументирована как отклонение здесь и в `decisions.md`, а не молча.
+
+**Docs touched:**
+
+- `docs/architecture.md` (v2.3 — состав `api` пакета: `api.admin`/`api.security` реализованы, package dependency direction дополнен)
+- `docs/api.md` (v2.3 — admin sync endpoint помечен «implemented», response sketch исправлен под реальный `JiraSyncResult`, убран несуществующий request body)
+- `docs/security.md` (v1.2 — §2 baseline помечен «реализован», §9 checklist аннотирован)
+- `docs/decisions.md` (новая строка Design notes — подтверждение реализации ADR-012 без отклонений от Decision + одно самостоятельно принятое уточнение)
+- `docs/ai_context.md` (Stage/версия — Phase 2.4 done, next — GitLab/Timeline или read API/scheduler)
+- `docs/session_log.md` (this entry), `docs/changelog.md`
+
+**Code touched (new):**
+
+- `backend/src/main/java/.../api/{package-info,admin/{JiraSyncController,package-info},security/{SecurityConfig,AdminTokenAuthenticationFilter,AdminTokenProperties,package-info}}.java`
+- `backend/src/test/java/.../api/admin/JiraSyncControllerTest.java`
+- `backend/src/test/java/.../api/security/{AdminTokenAuthenticationFilterTest,AdminTokenPropertiesTest}.java`
+
+**Code touched (modified):**
+
+- `backend/pom.xml` (`spring-boot-starter-security`, `spring-security-test`)
+- `backend/src/main/resources/application.yml` (`delivery-monitor.admin.token`)
+- `backend/src/main/java/.../sync/jira/package-info.java`, `backend/src/main/java/.../domain/issue/package-info.java` (Javadoc: `POST /api/admin/sync/jira` больше не «out of scope» — реализован в `api.admin`, обе стороны его не импортируют)
+- `backend/src/test/java/.../DeliveryMonitorApplicationTests.java` (`delivery-monitor.admin.token` placeholder + 2 новых теста)
+
+**Next:**
+
+1. `GET /api/issues`, `GET /api/sprints/current` (read API поверх `domain.issue`, не live Jira) и/или Phase 2.5 scheduler — по [roadmap.md](./roadmap.md). Не начинать без явного go-ahead.
+2. Получить реальный `JIRA_TOKEN` и `DELIVERY_MONITOR_ADMIN_TOKEN`, прогнать `JiraSmokeTest` и живой `POST /api/admin/sync/jira` — тот же открытый `TODO`, что и в предыдущих записях.
+
+---
+
 ## 2026-07-15 — Phase 2.3 Persistence implemented
 
 **Stage:** Phase 2.3 «Persistence» ([roadmap.md](./roadmap.md)) — **реализована** по дизайну, согласованному в предыдущей записи ("Phase 2.3 Persistence design approved"). Без изменений в архитектурных решениях — все они подтверждены и реализованы как согласовано. Сознательно **не добавлялись**: REST controller, Spring Security, scheduler, `sync_state`, `sprints`, incremental sync, GitLab/Jenkins (явные ограничения задачи).

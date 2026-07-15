@@ -1,6 +1,6 @@
 # Backend
 
-Spring Boot modular monolith. **Status:** Skeleton (Phase 1) done; Jira REST Client (Phase 2.1), board context provider (Task 2.3), Jira Sync application layer (Phase 2.2) and issue persistence (Phase 2.3) done. **Not yet:** REST API (`POST /api/admin/sync/jira`, `GET /api/issues`), Spring Security, scheduler, GitLab or Jenkins.
+Spring Boot modular monolith. **Status:** Skeleton (Phase 1) done; Jira REST Client (Phase 2.1), board context provider (Task 2.3), Jira Sync application layer (Phase 2.2), issue persistence (Phase 2.3) and the admin sync HTTP API + minimal Spring Security baseline (Phase 2.4) done. **Not yet:** read API (`GET /api/issues`), scheduler, GitLab or Jenkins.
 
 ## Stack
 
@@ -60,11 +60,14 @@ src/main/java/ru/eltc/deliverymonitor/
 │   ├── JiraIssueSnapshot       # normalized issue DTO (seam to persistence)
 │   ├── JiraSyncResult          # aggregates: fetched/created/updated/errors
 │   └── JiraSyncProperties      # jira.sync.page-size
-└── domain/issue/               # Phase 2.3 — persistence
-    ├── IssueEntity             # JPA entity (issues + fix_versions + labels)
-    ├── IssueRepository         # findAllByJiraIdIn
-    ├── IssuePersistencePort    # upsertPage(...) seam for sync layer
-    └── IssueUpsertService      # page-by-page upsert, match by jiraId
+├── domain/issue/               # Phase 2.3 — persistence
+│   ├── IssueEntity             # JPA entity (issues + fix_versions + labels)
+│   ├── IssueRepository         # findAllByJiraIdIn
+│   ├── IssuePersistencePort    # upsertPage(...) seam for sync layer
+│   └── IssueUpsertService      # page-by-page upsert, match by jiraId
+└── api/                        # Phase 2.4 — HTTP layer
+    ├── admin/                  # JiraSyncController — POST /api/admin/sync/jira
+    └── security/               # SecurityConfig + AdminTokenAuthenticationFilter + AdminTokenProperties
 ```
 
 See [docs/architecture.md](../docs/architecture.md) (Backend packages table) for the full planned package layout; packages are added when their phase starts, not ahead of time.
@@ -130,7 +133,7 @@ normalizes each wire `JiraIssueDto` into `JiraIssueSnapshot`, and returns `JiraS
 `JiraClientException` is caught and written to `errors` — the run returns whatever was fetched before
 the failure. Database errors are **not** masked and propagate up.
 
-**Not exposed yet:** no `POST /api/admin/sync/jira` REST controller; sync is callable only from code/tests.
+**Exposed via HTTP since Phase 2.4:** `POST /api/admin/sync/jira` (`api.admin.JiraSyncController`) — see the Admin Sync HTTP API section below.
 
 ## Persistence (Phase 2.3)
 
@@ -141,16 +144,33 @@ each page instead of accumulating the full list in memory.
 Liquibase `0002-issues.yaml` creates `issues`, `issue_fix_versions`, `issue_labels`.
 `sprints` and `sync_state` are deferred — see [docs/database.md](../docs/database.md).
 
+## Admin Sync HTTP API (Phase 2.4)
+
+`api.admin.JiraSyncController` exposes `POST /api/admin/sync/jira` — a thin HTTP adapter over
+`JiraSyncService.syncBoard()` that returns the `JiraSyncResult` as-is (no separate response DTO).
+There is no request body; the board filter and page size come from config (`jira.default-filter-id`,
+`jira.sync.page-size`).
+
+Access is gated by a minimal Spring Security baseline (`api.security`, [ADR-012](../docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)):
+`/api/admin/**` and every non-`health` actuator endpoint require an `Authorization: Bearer <token>`
+header matching `DELIVERY_MONITOR_ADMIN_TOKEN`; `/actuator/health` stays public. The check is
+**stateless** — no user identity is derived, no `User`/`Role` storage. A missing/invalid token →
+`401`. No JWT / OAuth2 Resource Server / OIDC / LDAP.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `DELIVERY_MONITOR_ADMIN_TOKEN` | *(empty)* | Bearer token gating `/api/admin/**`; a **separate** secret from `JIRA_TOKEN`, fail-fast if unset |
+
 ## Migrations
 
 Liquibase changesets live in `src/main/resources/db/changelog/changes/`, included from `db.changelog-master.yaml`. Add one changeset per logical change; never edit an already-applied changeset.
 
 ## Next task
 
-Phase **2.1** (Jira REST Client + auth), Task **2.3** (board context provider), Phase **2.2** (Jira Sync)
-and Phase **2.3** (Persistence) are done — stop here until explicitly told to continue.
+Phase **2.1** (Jira REST Client + auth), Task **2.3** (board context provider), Phase **2.2** (Jira Sync),
+Phase **2.3** (Persistence) and Phase **2.4** (admin sync HTTP API + Spring Security baseline,
+[ADR-012](../docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)) are done — stop here until explicitly told to continue.
 
-Дальше по порядку (не начинать без явного go-ahead): **Phase 2.4 REST API** —
-`POST /api/admin/sync/jira` (controller over `JiraSyncService`) + `GET /api/issues` (read from PostgreSQL)
-+ минимальный Spring Security baseline ([ADR-012](../docs/adr/0012-minimal-auth-baseline-admin-endpoints.md))
+Дальше по порядку (не начинать без явного go-ahead): **read API** —
+`GET /api/issues`, `GET /api/sprints/current` (read from PostgreSQL, not live Jira)
 → Phase 2.5 scheduler. См. [roadmap.md](../docs/roadmap.md).

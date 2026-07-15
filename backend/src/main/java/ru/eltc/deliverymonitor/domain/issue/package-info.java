@@ -22,7 +22,10 @@
  *
  * <p><b>Deliberately out of scope in this phase</b> (docs/roadmap.md, docs/decisions.md): the
  * {@code sprints} and {@code sync_state} tables (no sprint data on the observed Kanban board, no
- * incremental sync/watermark yet), the {@code POST /api/admin/sync/jira} REST controller (Phase
- * 2.4), the {@code @Scheduled} poller (Phase 2.5), Spring Security, and GitLab/Jenkins.
+ * incremental sync/watermark yet), the {@code @Scheduled} poller (Phase 2.5), and GitLab/Jenkins.
+ * The {@code POST /api/admin/sync/jira} REST controller and the admin Spring Security baseline
+ * were added in Phase 2.4 ({@code ru.eltc.deliverymonitor.api.admin}, {@code
+ * ru.eltc.deliverymonitor.api.security}) — neither imports from this package directly; both go
+ * through {@code sync.jira.JiraSyncService}.
  */
 package ru.eltc.deliverymonitor.domain.issue;
