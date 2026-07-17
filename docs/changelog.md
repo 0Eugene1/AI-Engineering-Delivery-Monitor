@@ -8,7 +8,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **PostgreSQL schema-validate на `activity_events.payload`:** `@Lob` на `String` в Hibernate 6 мапится в PostgreSQL `oid`, а Liquibase `CLOB` на PG даёт `text` → старт приложения падал (`found text, expecting oid`). В `ActivityEventEntity` `@Lob` заменён на `@JdbcTypeCode(SqlTypes.LONGVARCHAR)`. Обнаружено при первом локальном запуске на Docker Postgres.
+
 ### Documentation
+
+- **Smoke checklist после крупного этапа:** в `backend/README.md` — 7 пунктов (старт, Liquibase, health, workstream-types, sync/jira, issues в БД, 401 без Bearer) + PowerShell-сниппет; ссылка из `docs/README.md`. После 3.8 расширить GitLab sync / timeline.
+
+- **First local run (2026-07-17):** зафиксирован smoke Postgres + mock profiles + `POST /api/admin/sync/jira` → 5 demo issues; см. `session_log.md`.
 
 - **Docs sync после Phase 3.7:** актуализированы статусы во всех entry-point документах под фактический код (191 тест). `roadmap.md` v2.9 — 3.7 Done, next 3.8; `ai_context.md` v2.13; `architecture.md` v2.11; `api.md` v2.7; корневой `README.md`, `backend/README.md`, `structure.md`.
 

@@ -41,6 +41,7 @@
 3. Обнови индекс `docs/decisions.md`.
 4. Добавь запись в `docs/changelog.md`.
 5. При крупном этапе — запись в `docs/session_log.md`.
+6. После крупного этапа реализации — прогони [smoke checklist](./backend/README.md#smoke-checklist-после-крупного-этапа) (старт, Liquibase, health, sync/jira, 401).
 
 **Нет обновления docs = изменение не считается завершённым.**
 

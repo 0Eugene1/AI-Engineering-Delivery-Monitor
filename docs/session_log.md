@@ -18,6 +18,38 @@
 
 ---
 
+## 2026-07-17 — First local run (Postgres + mock Jira sync)
+
+**Stage:** операционный smoke первого локального запуска (не новая фаза roadmap). Цель — поднять стек и проверить manual Jira path end-to-end на mock-данных.
+
+**Summary:**
+
+1. **PostgreSQL** — через Docker Compose (`docker/`, контейнер `delivery-monitor-postgres`, healthy на `localhost:5432`). Учётка: `delivery_monitor` / `delivery_monitor` / БД `delivery_monitor`. pgAdmin подключение OK.
+2. **Env** — `DELIVERY_MONITOR_ADMIN_TOKEN=my-secret-admin-token` (User env Windows).
+3. **Backend** — `.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=jira-mock,gitlab-mock"`.
+4. **Проверки:**
+   - `GET /actuator/health` → `{"status":"UP"}`
+   - `GET /api/workstream-types` → `backend` / `frontend` / `oracle` / `qa` (seed Liquibase)
+   - `POST /api/admin/sync/jira` + Bearer → `fetched=5`, `created=5`, `mocked=true`, `errors=[]`
+   - `GET /api/issues` → demo keys `MPTPSUPP-90001`…`90005`
+5. **Блокер при старте (исправлен):** Hibernate schema-validate падал на `activity_events.payload` — БД `text`, entity `@Lob` ожидал PostgreSQL `oid`. Фикс: `@JdbcTypeCode(SqlTypes.LONGVARCHAR)` вместо `@Lob` в `ActivityEventEntity`.
+
+**Decisions / заметки:**
+
+- Первый запуск удобнее на **mock-профилях**, без реальных `JIRA_TOKEN` / `GITLAB_TOKEN`.
+- `POST /api/admin/sync/gitlab` **ещё нет** (Phase **3.8**) — `activity_events` / `workstreams` / timeline после GitLab sync пока пустые.
+- UI нет: смотреть данные в браузере через GET API или в pgAdmin.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/.../domain/timeline/ActivityEventEntity.java` (`@Lob` → `LONGVARCHAR`).
+
+**Docs follow-up:** smoke checklist (7 пунктов) зафиксирован в [backend/README.md](../backend/README.md#smoke-checklist-после-крупного-этапа); ссылка из `docs/README.md`.
+
+**Next:** Phase **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`) — после него полный mock e2e до timeline; опционально — live Jira/GitLab с реальными токенами и project ID.
+
+---
+
 ## 2026-07-17 — Docs sync: статус Phase 3.7 + commit/push
 
 **Stage:** docs sync (после реализации 3.7). Код Phase 3.7 уже написан; здесь — актуализация entry-point `.md` под фактический статус.

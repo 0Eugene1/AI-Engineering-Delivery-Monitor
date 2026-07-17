@@ -5,9 +5,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -47,7 +48,9 @@ public class ActivityEventEntity {
     @Column(name = "type", nullable = false)
     private String type;
 
-    @Lob
+    // LONGVARCHAR → PostgreSQL TEXT (matches Liquibase CLOB→TEXT). Plain @Lob maps to OID and
+    // fails schema validate: found text, expecting oid.
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "payload")
     private String payload;
 

@@ -43,6 +43,33 @@ cd backend
 
 The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **191** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
 
+## Smoke checklist (после крупного этапа)
+
+Быстрый интеграционный прогон (~пара минут) на реальном Postgres + запущенном backend.
+Удобно с профилями `jira-mock` (и при необходимости `gitlab-mock`). Нужен `DELIVERY_MONITOR_ADMIN_TOKEN`.
+
+| # | Check | Ожидание |
+|---|---|---|
+| 1 | Приложение стартует | нет stacktrace / `Started DeliveryMonitorApplication` |
+| 2 | Liquibase применяет миграции | в логе успешный changelog; таблицы на месте |
+| 3 | `GET /actuator/health` | `{"status":"UP"}` |
+| 4 | `GET /api/workstream-types` | seed: `backend`, `frontend`, `oracle`, `qa` |
+| 5 | `POST /api/admin/sync/jira` + `Authorization: Bearer <token>` | `errors` пустой; `fetched`/`created`/`updated` > 0 (mock: обычно 5) |
+| 6 | Таблица `issues` (или `GET /api/issues`) | появились записи |
+| 7 | `POST /api/admin/sync/jira` **без** Bearer | `401` |
+
+PowerShell (после старта):
+
+```powershell
+Invoke-RestMethod http://localhost:8080/actuator/health
+Invoke-RestMethod http://localhost:8080/api/workstream-types
+try { Invoke-WebRequest -Method POST http://localhost:8080/api/admin/sync/jira -UseBasicParsing } catch { $_.Exception.Response.StatusCode.value__ }  # → 401
+Invoke-RestMethod -Method POST http://localhost:8080/api/admin/sync/jira -Headers @{ Authorization = "Bearer $env:DELIVERY_MONITOR_ADMIN_TOKEN" }
+Invoke-RestMethod http://localhost:8080/api/issues
+```
+
+После Phase **3.8** сюда же добавится шаг `POST /api/admin/sync/gitlab` + проверка `activity_events` / timeline.
+
 ## Package layout
 
 ```text

@@ -35,7 +35,7 @@ Source of Truth для **AI Engineering Delivery Monitor**.
 2. Один крупный документ = один `.md` (или один ADR на решение).
 3. Документы должны быть пригодны к Git as-is.
 4. Концепция архитектуры: **v2.1** (modular monolith + configurable Workstream Type).
-5. После крупного этапа — запись в [session_log.md](./session_log.md) и [changelog.md](./changelog.md).
+5. После крупного этапа — запись в [session_log.md](./session_log.md) и [changelog.md](./changelog.md), плюс короткий [smoke checklist](../backend/README.md#smoke-checklist-после-крупного-этапа) (старт, Liquibase, health, sync/jira, 401).
 
 ## What to update when architecture changes
 
@@ -50,7 +50,7 @@ Source of Truth для **AI Engineering Delivery Monitor**.
 | Scope / порядок этапов | `roadmap.md`, `vision.md` |
 | Новое trade-off | `docs/adr/00XX-….md` + `decisions.md` |
 | Новый термин | `glossary.md` |
-| Крупный этап завершён | `session_log.md`, `changelog.md` |
+| Крупный этап завершён | `session_log.md`, `changelog.md` + [smoke checklist](../backend/README.md#smoke-checklist-после-крупного-этапа) |
 | Структура репо / локальный путь | `structure.md`, root `README.md` |
 
 ## ADR
