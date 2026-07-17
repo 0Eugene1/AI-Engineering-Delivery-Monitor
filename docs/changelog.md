@@ -8,13 +8,25 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **Docs tidy (перед 3.9):** сверены entry-point docs со статусом 3.1–3.8 Done / 3.9 design approved / 194 tests. `database.md` v2.5 — таблицы Phase 3 помечены Real (`0003`–`0007`). `integrations.md` v2.3 — manual sync 3.8 Done. Историческая запись first local run уточнена.
+
+- **Phase 3.9 GitLab reconcile scheduler — design checkpoint (docs-only):** согласовано зеркало Phase 2.5 — `sync.gitlab.GitLabSyncScheduler` → только `GitLabSyncService.syncAll()`; in-process `AtomicBoolean` guard в сервисе; `gitlab.sync.enabled` default `false` / `interval` default `10m` (`GITLAB_SYNC_ENABLED`/`GITLAB_SYNC_INTERVAL`); `SchedulingConfigurer` + `fixedDelay`. Не в `api.admin`; не через Controller/`GitLabClient`. Out of scope: `sync_state`, distributed lock, incremental, retry, webhooks. Обновлены: `decisions.md`, `architecture.md`, `roadmap.md` (v2.10a), `session_log.md`. Код не писался. Новый ADR не создавался.
+
+- **Milestone: first value e2e + docs sync Phase 3.8:** на mock-профилях подтверждён полный путь `POST …/sync/jira` → `POST …/sync/gitlab` → `GET /api/issues/{key}/timeline` с реальными `BRANCH_CREATED`/`COMMIT`/`MR_OPENED`. Актуализированы entry-point docs: `roadmap.md` v2.10 (3.8 Done, next 3.9), `ai_context.md` v2.14 (194 tests), `architecture.md` v2.12, `api.md` v2.8, корневой `README.md`, `backend/README.md` (smoke checklist расширен GitLab sync + timeline).
+
+### Added
+
+- **Phase 3.8 Admin GitLab Sync HTTP API**: `POST /api/admin/sync/gitlab` (`api.admin.GitLabSyncController`) — тонкий HTTP-адаптер над `sync.gitlab.GitLabSyncService#syncAll()`, реюз существующего `GitLabSyncResult` без отдельного response DTO. Security — существующий Bearer `DELIVERY_MONITOR_ADMIN_TOKEN` / `SecurityConfig` на `/api/admin/**` (ADR-012); новой auth-логики нет. **Не** добавлялись: scheduler, webhooks, retry, incremental sync, UI, persistence, новый ADR. Тесты (+3): `GitLabSyncControllerTest` (401 без token / 401 wrong token / 200 + `verify(syncAll)`). `.\mvnw.cmd clean verify` — 194 теста (было 191), 0 failures, 0 errors, 2 skipped. **Отклонения от дизайна Phase 3.8:** нет.
+
 ### Fixed
 
-- **PostgreSQL schema-validate на `activity_events.payload`:** `@Lob` на `String` в Hibernate 6 мапится в PostgreSQL `oid`, а Liquibase `CLOB` на PG даёт `text` → старт приложения падал (`found text, expecting oid`). В `ActivityEventEntity` `@Lob` заменён на `@JdbcTypeCode(SqlTypes.LONGVARCHAR)`. Обнаружено при первом локальном запуске на Docker Postgres.
+- **`activity_events.payload` mapping (H2 + PostgreSQL):** `@Lob` String → PostgreSQL OID (conflict with Liquibase CLOB→text). Затем Liquibase `CLOB`/`TEXT` на H2 давали JDBC CLOB vs Hibernate LONGVARCHAR. Итог: колонка в `0006` → `VARCHAR(1048576)` + `@JdbcTypeCode(LONGVARCHAR)` + `length` на entity. Без возврата к `@Lob`.
 
 ### Documentation
 
-- **Smoke checklist после крупного этапа:** в `backend/README.md` — 7 пунктов (старт, Liquibase, health, workstream-types, sync/jira, issues в БД, 401 без Bearer) + PowerShell-сниппет; ссылка из `docs/README.md`. После 3.8 расширить GitLab sync / timeline.
+- **Smoke checklist после крупного этапа:** в `backend/README.md` — пункты старта, Liquibase, health, workstream-types, sync/jira, issues, sync/gitlab, timeline, 401 без Bearer + PowerShell-сниппет; ссылка из `docs/README.md`.
 
 - **First local run (2026-07-17):** зафиксирован smoke Postgres + mock profiles + `POST /api/admin/sync/jira` → 5 demo issues; см. `session_log.md`.
 

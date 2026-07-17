@@ -18,6 +18,113 @@
 
 ---
 
+## 2026-07-17 — Docs tidy + commit: Phase 3.8 + 3.9 design checkpoint
+
+**Stage:** docs tidy перед Phase 3.9. Цель — выровнять SoT под фактический код/статус, затем commit/push.
+
+**Summary:**
+
+| Файл | Правка |
+|---|---|
+| `database.md` (v2.5) | Phase 3 tables → **Real** (`0003`–`0007`); убрано «миграции не создаются» |
+| `integrations.md` (v2.3) | manual sync **3.8 Done**, 3.9 design approved |
+| `roadmap.md` | 3.9 в фактическом статусе → Next (design approved) |
+| `session_log` / `changelog` | уточнения, merge Fixed, tidy entry |
+| entry-points | уже на 3.8 Done / 194 tests / next 3.9 |
+
+**Code in commit:** Phase 3.8 (`GitLabSyncController` + tests) + `activity_events.payload` VARCHAR fix + docs.
+
+**Next:** go-ahead → Phase **3.9**.
+
+---
+
+## 2026-07-17 — Design checkpoint: Phase 3.9 GitLabSyncScheduler (перед кодом)
+
+**Stage:** docs-only (перед Phase 3.9). Код **не** менялся. Новый ADR **не** создавался.
+
+**Summary:**
+
+Согласован дизайн reconcile scheduler — полное зеркало Phase 2.5 / `JiraSyncScheduler`:
+
+| Вопрос | Решение |
+|---|---|
+| Где живёт? | `sync.gitlab.GitLabSyncScheduler` — **не** `api.admin`, не `integration.gitlab` |
+| Точка входа | Только `GitLabSyncService.syncAll()` — не `GitLabClient`, не Controller |
+| Параллельный запуск | `AtomicBoolean syncInProgress` **в** `GitLabSyncService` (оба входа делят guard) |
+| Конфиг | `gitlab.sync.enabled` default `false`, `gitlab.sync.interval` default `10m` ← `GITLAB_SYNC_ENABLED` / `GITLAB_SYNC_INTERVAL` |
+| Механика | `SchedulingConfigurer` + `addFixedDelayTask` (**не** `fixedRate`) |
+| Out of scope | `sync_state`, distributed lock, incremental, retry, webhooks, pipelines; без HTTP `409`; без смены `GitLabSyncResult` |
+
+```text
+POST /api/admin/sync/gitlab ──┐
+                              ├──► GitLabSyncService.syncAll()  (+ AtomicBoolean guard)
+GitLabSyncScheduler ──────────┘
+```
+
+**Docs touched:** `docs/decisions.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs/session_log.md`, `docs/changelog.md`.
+
+**Code touched:** none.
+
+**Next:** go-ahead → реализация Phase **3.9**.
+
+---
+
+## 2026-07-17 — Milestone: first value e2e (mock Jira + GitLab → Timeline) + docs sync 3.8
+
+**Stage:** docs sync + операционный milestone. Код Phase 3.8 уже реализован; здесь — фиксация **первой ценности** продукта и актуализация entry-point `.md`.
+
+**Summary:**
+
+На локальном стеке (Postgres Docker + `jira-mock,gitlab-mock`) прогнан полный manual path:
+
+1. `POST /api/admin/sync/jira` → `fetched=5`, `created=5` → `GET /api/issues` = `MPTPSUPP-90001`…`90005`
+2. `POST /api/admin/sync/gitlab` → `projectsSynced=1`, branches/commits/MRs → БД (`activity_events=8`, `workstreams=2`, …)
+3. `GET /api/issues/MPTPSUPP-90001/timeline` → **не пустой**: `MR_OPENED`, `COMMIT`, `BRANCH_CREATED` (workstream `backend`)
+
+Это первый end-to-end результат системы без UI: GitLab mock → `activity_events` → Timeline API.
+
+| Файл | Что исправлено |
+|---|---|
+| `roadmap.md` (v2.10) | 3.8 **Done**, next **3.9**; e2e milestone |
+| `ai_context.md` (v2.14) | Stage → 3.1–3.8 done; 194 tests; next 3.9 |
+| `architecture.md` (v2.12) | `GitLabSyncController`; Admin HTTP 3.8 done |
+| `api.md` (v2.8) | `POST /api/admin/sync/gitlab` marked implemented |
+| `README.md` / `backend/README.md` | Status, smoke checklist (+ GitLab + timeline), Next |
+
+**Docs touched:** перечисленные выше + `session_log.md`, `changelog.md`.
+
+**Code touched:** none (в этом шаге); Phase 3.8 уже в коде.
+
+**Next:** go-ahead → Phase **3.9** Reconcile scheduler.
+
+---
+
+## 2026-07-17 — Phase 3.8 Admin GitLab Sync HTTP API implemented
+
+**Stage:** Phase 3.8 «Admin sync HTTP» ([roadmap.md](./roadmap.md) task 3.8) — **реализован**. Код в `api.admin.GitLabSyncController`. Сознательно **не** добавлялись: scheduler (3.9), webhooks, retry, incremental sync, UI, новые persistence-слои, новая security-логика, новый ADR.
+
+**Summary:**
+
+1. **`POST /api/admin/sync/gitlab`** — `api.admin.GitLabSyncController`: тонкий HTTP-адаптер → `GitLabSyncService.syncAll()` → ответ as-is `GitLabSyncResult` (без отдельного response DTO; зеркало `JiraSyncController` / `JiraSyncResult`).
+2. **Security:** существующий `SecurityConfig` + Bearer `DELIVERY_MONITOR_ADMIN_TOKEN` на `/api/admin/**` (ADR-012). Новой auth-логики нет.
+3. **Тесты (+3):** `GitLabSyncControllerTest` — 401 без token; 401 с неверным token; 200 + тело `GitLabSyncResult` + `verify(syncAll)` с верным Bearer.
+4. **Collateral fix (verify):** после local-run замены `@Lob` → `LONGVARCHAR` на `activity_events.payload` H2 schema-validate падал (`found CLOB, expecting LONGVARCHAR`). Liquibase `0006`: `CLOB` → `VARCHAR(1048576)`; entity — `LONGVARCHAR` + `length`. На PG оба варианта дают character-хранилище без OID.
+
+**Decisions / отклонения:**
+
+- Отклонений от дизайна Phase 3.8 **нет** — контроллер = зеркало Jira; security reuse; контракт `GitLabSyncResult` без изменений.
+- Collateral: физический тип `payload` в changeset 0006 сужен с CLOB/TEXT до `VARCHAR(1048576)` ради кросс-БД validate (H2 + PG). Если локальный Docker Postgres уже прогнал старый 0006 — возможен Liquibase checksum mismatch / type drift → recreate volume.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `GitLabSyncController`, `GitLabSyncControllerTest`, `api.admin` package-info, `GitLabSyncService` javadoc, `ActivityEventEntity`, Liquibase `0006-activity-events.yaml`.
+
+**Verify:** `.\mvnw.cmd clean verify` — **194** теста (было 191), 0 failures, 0 errors, 2 skipped.
+
+**Next:** Phase **3.9** Reconcile scheduler (`sync.gitlab`).
+
+---
+
 ## 2026-07-17 — First local run (Postgres + mock Jira sync)
 
 **Stage:** операционный smoke первого локального запуска (не новая фаза roadmap). Цель — поднять стек и проверить manual Jira path end-to-end на mock-данных.
@@ -37,16 +144,16 @@
 **Decisions / заметки:**
 
 - Первый запуск удобнее на **mock-профилях**, без реальных `JIRA_TOKEN` / `GITLAB_TOKEN`.
-- `POST /api/admin/sync/gitlab` **ещё нет** (Phase **3.8**) — `activity_events` / `workstreams` / timeline после GitLab sync пока пустые.
+- *(На момент этой записи)* `POST /api/admin/sync/gitlab` ещё не было — после Phase **3.8** + milestone e2e path закрыт (см. записи выше).
 - UI нет: смотреть данные в браузере через GET API или в pgAdmin.
 
 **Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
 
 **Code touched:** `backend/.../domain/timeline/ActivityEventEntity.java` (`@Lob` → `LONGVARCHAR`).
 
-**Docs follow-up:** smoke checklist (7 пунктов) зафиксирован в [backend/README.md](../backend/README.md#smoke-checklist-после-крупного-этапа); ссылка из `docs/README.md`.
+**Docs follow-up:** smoke checklist зафиксирован в [backend/README.md](../backend/README.md#smoke-checklist-после-крупного-этапа); ссылка из `docs/README.md`.
 
-**Next:** Phase **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`) — после него полный mock e2e до timeline; опционально — live Jira/GitLab с реальными токенами и project ID.
+**Next:** *(на момент записи)* Phase **3.8** — выполнено; см. milestone e2e выше.
 
 ---
 

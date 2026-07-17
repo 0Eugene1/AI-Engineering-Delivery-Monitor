@@ -48,10 +48,10 @@ public class ActivityEventEntity {
     @Column(name = "type", nullable = false)
     private String type;
 
-    // LONGVARCHAR → PostgreSQL TEXT (matches Liquibase CLOB→TEXT). Plain @Lob maps to OID and
-    // fails schema validate: found text, expecting oid.
+    // LONGVARCHAR ↔ Liquibase VARCHAR(1048576) on H2 and PostgreSQL. Plain @Lob maps to OID
+    // on PG. Liquibase CLOB/TEXT become JDBC CLOB on H2 and fail validate against LONGVARCHAR.
     @JdbcTypeCode(SqlTypes.LONGVARCHAR)
-    @Column(name = "payload")
+    @Column(name = "payload", length = 1_048_576)
     private String payload;
 
     @Column(name = "source", nullable = false, updatable = false)

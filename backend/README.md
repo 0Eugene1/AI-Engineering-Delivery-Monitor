@@ -1,6 +1,6 @@
 # Backend
 
-Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.7** (GitLab client → sync → config/git entities → activity_events → workstreams → Read API) done. **Next:** Phase **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`). Not yet: GitLab scheduler (3.9), Jenkins, frontend.
+Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.8** (GitLab client → sync → config/git entities → activity_events → workstreams → Read API → Admin sync HTTP) done. **Milestone:** mock e2e Jira+GitLab → Timeline. **Next:** Phase **3.9** reconcile scheduler (design approved). Not yet: Jenkins, frontend.
 
 ## Stack
 
@@ -41,7 +41,7 @@ cd backend
 .\mvnw.cmd clean verify
 ```
 
-The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **191** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
+The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **194** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
 
 ## Smoke checklist (после крупного этапа)
 
@@ -55,10 +55,12 @@ The context test uses an embedded H2 database in PostgreSQL-compatibility mode, 
 | 3 | `GET /actuator/health` | `{"status":"UP"}` |
 | 4 | `GET /api/workstream-types` | seed: `backend`, `frontend`, `oracle`, `qa` |
 | 5 | `POST /api/admin/sync/jira` + `Authorization: Bearer <token>` | `errors` пустой; `fetched`/`created`/`updated` > 0 (mock: обычно 5) |
-| 6 | Таблица `issues` (или `GET /api/issues`) | появились записи |
-| 7 | `POST /api/admin/sync/jira` **без** Bearer | `401` |
+| 6 | Таблица `issues` (или `GET /api/issues`) | появились записи (mock: `MPTPSUPP-90001`…`90005`) |
+| 7 | `POST /api/admin/sync/gitlab` + Bearer (профиль `gitlab-mock`) | `mocked=true`; `errors` пустой; branches/commits/MRs → БД |
+| 8 | `GET /api/issues/MPTPSUPP-90001/timeline` | events не пустые: `BRANCH_CREATED` / `COMMIT` / `MR_*` |
+| 9 | `POST /api/admin/sync/jira` **без** Bearer | `401` |
 
-PowerShell (после старта):
+PowerShell (после старта с `jira-mock,gitlab-mock`):
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/actuator/health
@@ -66,9 +68,9 @@ Invoke-RestMethod http://localhost:8080/api/workstream-types
 try { Invoke-WebRequest -Method POST http://localhost:8080/api/admin/sync/jira -UseBasicParsing } catch { $_.Exception.Response.StatusCode.value__ }  # → 401
 Invoke-RestMethod -Method POST http://localhost:8080/api/admin/sync/jira -Headers @{ Authorization = "Bearer $env:DELIVERY_MONITOR_ADMIN_TOKEN" }
 Invoke-RestMethod http://localhost:8080/api/issues
+Invoke-RestMethod -Method POST http://localhost:8080/api/admin/sync/gitlab -Headers @{ Authorization = "Bearer $env:DELIVERY_MONITOR_ADMIN_TOKEN" }
+Invoke-RestMethod http://localhost:8080/api/issues/MPTPSUPP-90001/timeline
 ```
-
-После Phase **3.8** сюда же добавится шаг `POST /api/admin/sync/gitlab` + проверка `activity_events` / timeline.
 
 ## Package layout
 
@@ -89,7 +91,7 @@ src/main/java/ru/eltc/deliverymonitor/
 │   ├── timeline/               # Phase 3.5 — IssueKeyExtractor + activity_events
 │   └── workstream/             # Phase 3.6 — Workstream = Issue × Type
 └── api/
-    ├── admin/                  # Phase 2.4 — POST /api/admin/sync/jira
+    ├── admin/                  # Phase 2.4 + 3.8 — POST /api/admin/sync/jira|gitlab
     ├── security/               # Phase 2.4 — Bearer admin-token baseline
     ├── issue/                  # Read API — GET /api/issues, GET /api/issues/{key},
     │                           #            GET /api/issues/{key}/timeline (Phase 3.7)
@@ -173,12 +175,15 @@ each page instead of accumulating the full list in memory.
 Liquibase `0002-issues.yaml` creates `issues`, `issue_fix_versions`, `issue_labels`.
 `sprints` and `sync_state` are deferred — see [docs/database.md](../docs/database.md).
 
-## Admin Sync HTTP API (Phase 2.4)
+## Admin Sync HTTP API (Phase 2.4 + 3.8)
 
 `api.admin.JiraSyncController` exposes `POST /api/admin/sync/jira` — a thin HTTP adapter over
 `JiraSyncService.syncBoard()` that returns the `JiraSyncResult` as-is (no separate response DTO).
 There is no request body; the board filter and page size come from config (`jira.default-filter-id`,
 `jira.sync.page-size`).
+
+`api.admin.GitLabSyncController` (**Phase 3.8**) exposes `POST /api/admin/sync/gitlab` — the same
+pattern over `GitLabSyncService.syncAll()`, returning `GitLabSyncResult` as-is.
 
 Access is gated by a minimal Spring Security baseline (`api.security`, [ADR-012](../docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)):
 `/api/admin/**` and every non-`health` actuator endpoint require an `Authorization: Bearer <token>`
@@ -190,7 +195,7 @@ header matching `DELIVERY_MONITOR_ADMIN_TOKEN`; `/actuator/health` stays public.
 |---|---|---|
 | `DELIVERY_MONITOR_ADMIN_TOKEN` | *(empty)* | Bearer token gating `/api/admin/**`; a **separate** secret from `JIRA_TOKEN` / `GITLAB_TOKEN`, fail-fast if unset |
 
-## GitLab (Phase 3.1–3.6)
+## GitLab (Phase 3.1–3.8)
 
 | Env var | Default | Purpose |
 |---|---|---|
@@ -211,7 +216,7 @@ cd backend
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=gitlab-mock"
 ```
 
-**Not yet:** `POST /api/admin/sync/gitlab` (3.8), GitLab scheduler (3.9).
+**Not yet:** GitLab scheduler (3.9).
 
 ## Read API (issues + timeline + workstream types)
 
@@ -227,8 +232,8 @@ Current: `0001` baseline → `0002` issues → `0003` workstream_types → `0004
 
 ## Next task
 
-Phase **3.1–3.7** done. Stop here until explicitly told to continue.
+Phase **3.1–3.8** done. Stop here until explicitly told to continue.
 
-Дальше по порядку (не начинать без явного go-ahead): Phase **3.8** —
-`POST /api/admin/sync/gitlab` → **3.9** GitLab reconcile scheduler.
+Дальше по порядку (не начинать без явного go-ahead): Phase **3.9** —
+GitLab reconcile scheduler (`sync.gitlab`, fixedDelay; webhooks optional later).
 См. [roadmap.md](../docs/roadmap.md).

@@ -68,8 +68,8 @@ import java.util.Optional;
  * Orphans (no key) are still persisted with {@code issue_key = null} and do <b>not</b> create
  * workstreams.
  *
- * <p><b>Out of scope:</b> timeline/admin HTTP, dashboard, IssueEntity lookup, scheduler,
- * pipelines, Jenkins.
+ * <p><b>Out of scope:</b> dashboard, IssueEntity lookup, scheduler (Phase 3.9), pipelines,
+ * Jenkins. Admin HTTP entry is {@code api.admin.GitLabSyncController} (Phase 3.8).
  */
 @Service
 @EnableConfigurationProperties(GitLabSyncProperties.class)

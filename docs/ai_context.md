@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
-| **Version** | 2.13 |
-| **Stage** | Phase 2.1–2.5 done. Phase 3: **3.1–3.7 implemented** (GitLab → activity_events → workstreams → Read API; 191 tests). Next: **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`), then 3.9 scheduler |
+| **Version** | 2.14 |
+| **Stage** | Phase 2.1–2.5 done. Phase 3: **3.1–3.8 implemented** (194 tests). **Milestone:** mock e2e Jira+GitLab → Timeline. Next: **3.9** reconcile scheduler (**design approved**) |
 | **Last updated** | 2026-07-17 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
@@ -50,9 +50,10 @@
 | Phase 3.5 Linking + activity_events | Done — `domain.timeline` (`IssueKeyExtractor`, `ActivityEvent*`, `0006`); GitLab sync штампует `issue_key` и пишет `BRANCH_CREATED`/`COMMIT`/`MR_*`. См. [session_log.md](./session_log.md) |
 | Phase 3.6 Workstreams | Done — `domain.workstream` (`WorkstreamUpsertService`, derived status, `0007`); upsert при Git-активности с `issue_key`; `repository_id` nullable; auto shell-`qa` нет. См. [session_log.md](./session_log.md) |
 | Phase 3.7 Read API | Done — `api.issue.TimelineController` (`GET /api/issues/{key}/timeline`, PostgreSQL only, `occurred_at DESC`, empty → `200` + `[]`); `api.workstream.WorkstreamTypeController` (`GET /api/workstream-types`). `GET /api/issues/{key}` не менялся. См. [session_log.md](./session_log.md) |
-| Phase 3.8–3.9 Admin sync / scheduler | **Next 3.8:** `POST /api/admin/sync/gitlab`. Затем 3.9. **Не** pipelines/Jenkins/Feed/Risks/AI |
+| Phase 3.8 Admin sync HTTP | Done — `POST /api/admin/sync/gitlab` (`api.admin.GitLabSyncController` → `GitLabSyncService.syncAll()`, реюз `GitLabSyncResult`; тот же Bearer admin-token). Mock e2e до Timeline подтверждён. См. [session_log.md](./session_log.md) |
+| Phase 3.9 Reconcile scheduler | **Next** — design approved (зеркало `JiraSyncScheduler`: `sync.gitlab`, только `syncAll()`, guard в сервисе, `enabled=false`/`interval=10m`). **Не** pipelines/Jenkins/Feed/Risks/AI |
 
-Discovery и Skeleton завершены. **Jira Phase 2.1–2.5** и **Phase 3.1–3.7** реализованы (`.\mvnw.cmd clean verify` — 191 тест). Next: **3.8** Admin sync HTTP. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
+Discovery и Skeleton завершены. **Jira Phase 2.1–2.5** и **Phase 3.1–3.8** реализованы (`.\mvnw.cmd clean verify` — 194 теста). **Milestone:** mock path Jira sync → GitLab sync → Issue Timeline. Next: **3.9** reconcile scheduler. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
 
 ---
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.2 |
+| **Version** | 2.3 |
 | **Related** | [architecture.md](./architecture.md), [database.md](./database.md), [glossary.md](./glossary.md) |
 
 ## Principles
@@ -61,7 +61,7 @@ sprint in openSprints() AND project = MPTPSUPP
 
 | | |
 |---|---|
-| Mode | **Phase 3 start: manual poll** (`POST /api/admin/sync/gitlab`) → then reconcile scheduler; **webhook preferred** after manual path stable (ADR-004) |
+| Mode | **Phase 3.8 Done:** manual poll `POST /api/admin/sync/gitlab`. **Phase 3.9 next** (design approved): reconcile scheduler. **Webhook preferred** after scheduled path stable (ADR-004) |
 | Auth | Project/Group token (`PRIVATE-TOKEN`), env `GITLAB_TOKEN` |
 | Mapping | `gitlab project → workstream_type_code` via table `repositories` |
 | Base URL | `https://git.eltc.ru` ([discovery.md](./discovery.md) §9.2) |

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Draft (MVP contract) |
-| **Version** | 2.7 |
+| **Version** | 2.8 |
 | **Style** | REST, JSON |
 | **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md), [security.md](./security.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) |
 
@@ -84,14 +84,18 @@ Response — отдельный DTO `IssueResponse` (не JPA entity):
 `ActivityEventRepository.findAllByIssueKeyOrderByOccurredAtDesc`. Только PostgreSQL; без live Jira/GitLab;
 **не** требует `IssueEntity`. Пустой/неизвестный key → `200` + `{ "issueKey", "events": [] }`.
 
-### Phase 3 — read / admin endpoints (3.7 implemented; 3.8 next)
+### Phase 3 — read / admin endpoints (3.7–3.8 implemented; 3.9 next)
 
 | Endpoint | Назначение | Статус |
 |---|---|---|
 | `GET /api/workstream-types` | Активные типы для UI pills | **Done** (3.7) |
 | `GET /api/issues/{key}/timeline` | Issue Timeline (hero) | **Done** (3.7) |
 | `GET /api/issues/{key}` *(расширение)* | Опционально: вложенные `workstreams[]` + derived status | Не в 3.7 (endpoint не меняли) |
-| `POST /api/admin/sync/gitlab` | Ручной GitLab sync (зеркало Jira) | **Next** (3.8) |
+| `POST /api/admin/sync/gitlab` | Ручной GitLab sync (зеркало Jira) | **Done** (3.8) |
+
+#### `POST /api/admin/sync/gitlab` — contract (реализован в Phase 3.8)
+
+Зеркало `POST /api/admin/sync/jira`: `api.admin.GitLabSyncController` → `GitLabSyncService#syncAll()`, ответ — существующий `GitLabSyncResult` as-is (без отдельного DTO). Request body нет. Защита — тот же Bearer `DELIVERY_MONITOR_ADMIN_TOKEN` / `api.security` (ADR-012); без новой auth-логики. Mock e2e: после sync `GET /api/issues/{key}/timeline` отдаёт GitLab-события из PostgreSQL.
 
 #### `GET /api/issues/{key}/timeline` — contract (реализован в Phase 3.7)
 
@@ -110,7 +114,7 @@ Response — отдельный DTO `IssueResponse` (не JPA entity):
 }
 ```
 
-**Не в Phase 3:** `GET /api/activity` (Feed — Phase 4), `GET /api/releases/.../health`, `GET /api/risks`, `POST /hooks/gitlab` можно отложить до после manual sync (ADR-004 preferred webhook — но **после** 3.8), pipelines API.
+**Не в Phase 3:** `GET /api/activity` (Feed — Phase 4), `GET /api/releases/.../health`, `GET /api/risks`, `POST /hooks/gitlab` можно отложить до после manual sync (ADR-004 preferred webhook — но **после** 3.8, который Done), pipelines API.
 
 ### Admin sync (Phase 2.4 — implemented, до scheduler)
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.11 |
+| **Version** | 2.12 |
 | **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md), [security.md](./security.md) |
 
 ## Overview
@@ -58,9 +58,11 @@ integration.jira  →  sync.jira  →  domain.issue
 
 `sync.jira` зависит от `domain.issue` (вызывает `IssuePersistencePort`), но `domain.issue` ничего не импортирует из `sync.jira` — свой входной контракт (`IssueUpsertCommand`) он определяет сам; маппинг из `JiraIssueSnapshot` делает вызывающая сторона (`sync.jira`). Тот же принцип действует на границе `integration.jira → sync.jira` (`JiraContextProvider` — контракт integration-слоя, `sync.jira` от него зависит). См. [decisions.md](./decisions.md) (Design notes, 2026-07-15 — Phase 2.3 Persistence).
 
-`api.admin` зависит на `sync.jira` (вызывает `JiraSyncService.syncBoard()` и реюзает `JiraSyncResult` как HTTP response), но ничего не знает про `domain.issue`/`integration.jira` напрямую. `api.security` не зависит ни от одного бизнес-пакета — это чистый HTTP-уровень (Servlet filter + Spring Security config), не знающий про Jira/issues.
+`api.admin` зависит на `sync.jira` / `sync.gitlab` (вызывает `JiraSyncService.syncBoard()` / `GitLabSyncService.syncAll()` и реюзает `JiraSyncResult` / `GitLabSyncResult` как HTTP response), но ничего не знает про `domain.*` / `integration.*` напрямую. `api.security` не зависит ни от одного бизнес-пакета — это чистый HTTP-уровень (Servlet filter + Spring Security config), не знающий про Jira/GitLab/issues.
 
 `sync.jira.JiraSyncScheduler` (Phase 2.5) — второй, полностью симметричный вызывающий той же точки входа `JiraSyncService.syncBoard()`; живёт **внутри** `sync.jira` (не в `api.admin`, не в `integration.jira`), не вводит новой зависимости и не обходит `JiraSyncService`. Ни `api.admin.JiraSyncController`, ни `sync.jira.JiraSyncScheduler` не зависят друг от друга — оба зависят только на `JiraSyncService`.
+
+`sync.gitlab.GitLabSyncScheduler` (Phase 3.9, **design approved**, код ещё нет) — то же зеркало для GitLab: живёт в `sync.gitlab`, вызывает только `GitLabSyncService.syncAll()`; не зависит от `api.admin.GitLabSyncController` и не обходит сервис к `GitLabClient`. In-process guard — в `GitLabSyncService`. См. [decisions.md](./decisions.md) Design notes (2026-07-17 — Phase 3.9).
 
 `api.issue` (Read API) зависит **только** на `domain.issue` (`IssueEntity`/`IssueRepository`) — не на `sync.jira`, не на `integration.jira`, не на `JiraClient`. Это отдельная от `api.admin` ветвь зависимостей:
 
@@ -77,7 +79,7 @@ PostgreSQL  →  domain.issue  →  api.issue
 | `integration.jira` | HTTP-клиент + auth + wire DTO + `JiraContextProvider` (только integration layer) | Yes |
 | `sync.jira` | Application layer: `JiraSyncService` (оркестрация sync поверх `JiraContextProvider`, постраничная пагинация, нормализация в `JiraIssueSnapshot` — собственный контракт слоя), `JiraSyncResult` (агрегаты прогона). `JiraSyncScheduler` (Phase 2.5, **реализовано**) — фоновый вход в тот же `JiraSyncService.syncBoard()`, что и manual `POST /api/admin/sync/jira`: `SchedulingConfigurer`, условная регистрация по `jira.sync.enabled` (default `false`), `ScheduledTaskRegistrar.addFixedDelayTask` (не `fixedRate`) с интервалом `jira.sync.interval` (default `5m`). `JiraSyncService` несёт in-process guard (`AtomicBoolean`) — второй одновременный вызов `syncBoard()` (manual или scheduled) пропускается, не меняя форму `JiraSyncResult` | Yes |
 | `integration.gitlab` | **Phase 3.1 реализовано:** HTTP-клиент GitLab API v4 + auth + wire DTO (project/branch/commit/MR). **`RestGitLabClient` + `MockGitLabClient`**, выбор через конфиг (`gitlab.mode=rest\|mock`) — симметрия с Jira mock. Notes/approvals — по возможности API (EE); pipelines — **не** в Phase 3 | Yes |
-| `sync.gitlab` | **Phase 3.2+ реализовано:** application layer — `GitLabSyncService` (оркестрация; production list из `domain.repository` / PostgreSQL через `RepositoryPersistencePort`; yaml только mock/local/tests), upsert git entities + `activity_events` + workstreams; глубина commits — `gitlab.sync.commit-history-days` + API `since`. Admin HTTP (3.8) и reconcile scheduler (3.9) — ещё нет. **Не** зависит от `api.*` | Yes |
+| `sync.gitlab` | **Phase 3.2–3.8 реализовано:** application layer — `GitLabSyncService` (оркестрация; production list из `domain.repository` / PostgreSQL через `RepositoryPersistencePort`; yaml только mock/local/tests), upsert git entities + `activity_events` + workstreams; глубина commits — `gitlab.sync.commit-history-days` + API `since`. Admin HTTP (**3.8 Done**): `api.admin.GitLabSyncController` → `syncAll()`. **Phase 3.9 design approved (код ещё нет):** `GitLabSyncScheduler` в `sync.gitlab` (`SchedulingConfigurer`, `fixedDelay`, `gitlab.sync.enabled` default `false` / `gitlab.sync.interval` default `10m`); in-process guard (`AtomicBoolean`) в `GitLabSyncService`; только `syncAll()`. **Не** зависит от `api.*` | Yes |
 | `integration.jenkins` | Poll/webhook: builds | Yes (Phase 5) |
 | `domain.issue` | Issue + sprint + fixVersion. Persistence-слой (Phase 2.3, реализовано) — единственный владелец своих контрактов: `IssueEntity`, `IssueRepository`, `IssuePersistencePort` (+ `IssueUpsertCommand`, `IssueUpsertOutcome`), `IssueUpsertService` | Yes |
 | `domain.workstream` | **Phase 3.6 реализовано:** Workstream = Issue × Type; upsert из Git sync; derived status минимум (`not_started`/`in_progress`/`in_review`/`merged`); `repository_id`/`issue_id` nullable | Yes |
@@ -88,7 +90,7 @@ PostgreSQL  →  domain.issue  →  api.issue
 | `domain.activity` | Командный activity feed (read API — Phase 4; пишет в ту же `activity_events`) | Yes (Phase 4 UI) |
 | `domain.release` | Release Health по fixVersion | Yes |
 | `domain.risk` | Правила рисков | Yes |
-| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4 + Phase 3.7). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, без бизнес-логики, реюзает `JiraSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`), `TimelineController` (`GET /api/issues/{key}/timeline` — только `activity_events`, `occurred_at DESC`, empty → `200` + `[]`, без требования `IssueEntity`), `IssueQueryService` / `TimelineQueryService`, DTO. `api.workstream` — `WorkstreamTypeController` (`GET /api/workstream-types`). Зависит только от domain — без live Jira/GitLab. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
+| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4 + Phase 3.7–3.8). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`. `api.admin.GitLabSyncController` (**Phase 3.8**): `POST /api/admin/sync/gitlab`, тонкий HTTP-адаптер над `sync.gitlab.GitLabSyncService#syncAll()`, реюзает `GitLabSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`), `TimelineController` (`GET /api/issues/{key}/timeline` — только `activity_events`, `occurred_at DESC`, empty → `200` + `[]`, без требования `IssueEntity`), `IssueQueryService` / `TimelineQueryService`, DTO. `api.workstream` — `WorkstreamTypeController` (`GET /api/workstream-types`). Зависит только от domain — без live Jira/GitLab. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
 | AI Summary service | REST → LLM → markdown | After MVP |
 
 ## Core abstractions
@@ -126,9 +128,9 @@ PostgreSQL  →  domain.issue  →  api.issue
 
 См. [decisions.md](./decisions.md) и каталог [adr/](./adr/).
 
-## Phase 3 — GitLab + Timeline (3.1–3.7 Done; next 3.8)
+## Phase 3 — GitLab + Timeline (3.1–3.8 Done; next 3.9)
 
-> Design status: **approved**. Реализация по [roadmap.md](./roadmap.md) 3.1–3.9: **3.1–3.7 done**; next **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`).
+> Design status: **approved**. Реализация по [roadmap.md](./roadmap.md) 3.1–3.9: **3.1–3.8 done**; next **3.9** reconcile scheduler (**design checkpoint approved** — зеркало `JiraSyncScheduler`; см. [decisions.md](./decisions.md)). Mock e2e milestone: manual Jira + GitLab sync → Issue Timeline.
 
 ### Целевая зависимость пакетов (зеркало Jira)
 

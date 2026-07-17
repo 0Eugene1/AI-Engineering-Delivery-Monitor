@@ -42,8 +42,12 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
+                  # Large VARCHAR (not CLOB/TEXT): H2 maps both CLOB and TEXT to JDBC CLOB,
+                  # which fails Hibernate schema-validate against LONGVARCHAR. A large VARCHAR
+                  # stays varchar on H2 and PostgreSQL; entity uses @JdbcTypeCode(LONGVARCHAR).
+                  # Plain @Lob String on PG maps to OID — do not reintroduce @Lob.
                   name: payload
-                  type: CLOB
+                  type: VARCHAR(1048576)
               - column:
                   name: source
                   type: VARCHAR(64)
