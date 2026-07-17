@@ -18,6 +18,58 @@
 
 ---
 
+## 2026-07-17 — Docs sync: статус Phase 3.7 + commit/push
+
+**Stage:** docs sync (после реализации 3.7). Код Phase 3.7 уже написан; здесь — актуализация entry-point `.md` под фактический статус.
+
+**Summary:**
+
+| Файл | Что исправлено |
+|---|---|
+| `roadmap.md` (v2.9) | 3.7 **Done**, next **3.8**; таблица tasks / overview |
+| `ai_context.md` (v2.13) | Stage → 3.1–3.7 done; 191 tests; next 3.8 |
+| `architecture.md` (v2.11) | пакеты `api.issue` Timeline + `api.workstream`; Phase 3 header |
+| `api.md` (v2.7) | timeline + workstream-types marked implemented |
+| `README.md` / `backend/README.md` / `structure.md` | Status, Done, package layout, Next |
+
+**Docs touched:** перечисленные выше + `session_log.md`, `changelog.md`.
+
+**Code touched:** Phase 3.7 (тот же commit/push): `api.issue.Timeline*`, `api.workstream/**`, `ActivityEventRepository`, тесты.
+
+**Next:** go-ahead → Phase **3.8** Admin sync HTTP.
+
+---
+
+## 2026-07-17 — Phase 3.7 Read API: timeline + workstream-types implemented
+
+**Stage:** Phase 3.7 «Read API» ([roadmap.md](./roadmap.md) task 3.7) — **реализован**. Код в `api.issue` (Timeline) + `api.workstream`. Сознательно **не** добавлялись: write API, dashboard/UI, scheduler, security changes, Jira/GitLab live calls, новые persistence-слои, nested `workstreams[]` в `GET /api/issues/{key}`, Activity Feed.
+
+**Summary:**
+
+1. **`GET /api/issues/{key}/timeline`** — `TimelineController` + `TimelineQueryService` + `TimelineResponse`. Читает только PostgreSQL `activity_events` через `ActivityEventRepository.findAllByIssueKeyOrderByOccurredAtDesc` (`ORDER BY occurred_at DESC`). Пустой/неизвестный key → `200` + `{ issueKey, events: [] }` — **не** `404`. Не требует `IssueEntity`. `GET /api/issues/{key}` не менялся.
+2. **`GET /api/workstream-types`** — `WorkstreamTypeController` + `WorkstreamTypeQueryService` + `WorkstreamTypeResponse`. Активные типы через существующий `WorkstreamTypeRepository.findAllByActiveTrueOrderBySortOrderAsc()`.
+3. Зависимости: `PostgreSQL → domain.timeline (+ domain.workstream_type) → api.issue` и `PostgreSQL → domain.workstream_type → api.workstream`. Без `sync.*` / `integration.*`.
+
+**Decisions / отклонения:**
+
+- Добавлены **`TimelineQueryService`** / **`WorkstreamTypeQueryService`** (не в явном списке классов ТЗ) — симметрия с `IssueQueryService`; контроллеры остаются тонкими HTTP-адаптерами.
+- Nested records в `TimelineResponse`: `TimelineEvent`, `WorkstreamTypeRef`, `ActorRef` (sketch api.md).
+- **`summary`** в timeline item — **derived at read** из `type` + payload (в БД колонки нет); не хранится.
+- **`actor.id`** = `actor_username` (отдельного people id нет).
+- **`WorkstreamTypeResponse.sortOrder`** — доп. поле сверх «code + displayName» в Conventions (список уже отсортирован; поле удобно UI).
+- `ActivityEventRepository` расширен query-методом (не новый persistence-слой).
+- Опциональное вложение `workstreams[]` в issue detail — **не** делалось (ТЗ: `GET /api/issues/{key}` не менять).
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/.../api/issue/Timeline*`, `backend/.../api/workstream/**`, `ActivityEventRepository`, тесты.
+
+**Verify:** `.\mvnw.cmd clean verify` — **191** тест (было 182), 0 failures, 0 errors, 2 skipped.
+
+**Next:** Phase **3.8** — Admin sync HTTP (`POST /api/admin/sync/gitlab`).
+
+---
+
 ## 2026-07-17 — Docs sync: статус Phase 3.1–3.6 + commit/push
 
 **Stage:** docs sync (после реализации 3.1–3.6). Код не менялся в этом шаге — только актуализация `.md` под фактический статус.

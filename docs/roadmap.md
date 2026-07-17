@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.8 |
+| **Version** | 2.9 |
 | **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md), [discovery.md](./discovery.md) |
 
 ## Guiding rule
@@ -37,8 +37,9 @@
 | Phase 3.4 Git entities + sync→DB wiring (`branches`/`commits`/`merge_requests`; SoT = PostgreSQL) | **Done** |
 | Phase 3.5 Linking + `activity_events` (`IssueKeyExtractor`, timeline writer) | **Done** |
 | Phase 3.6 Workstreams (`domain.workstream`, Git-driven upsert) | **Done** |
-| Phase 3.7 Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`) | **Next** — design contract fixed (sort DESC, empty → 200) |
-| Phase 3.8–3.9 Admin sync HTTP + reconcile scheduler | Не начаты |
+| Phase 3.7 Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`) | **Done** |
+| Phase 3.8 Admin sync HTTP (`POST /api/admin/sync/gitlab`) | **Next** |
+| Phase 3.9 Reconcile scheduler | Не начат |
 | Phase 4+ (Activity Feed / Risks / Jenkins / Release Health / AI Summary) | Не начаты |
 
 **Замечание по нумерации:** в плановых таблицах ниже endpoint `POST /api/admin/sync/jira` отнесён к Phase 2.2, а «REST API» (read) — к Phase 2.4. Фактически admin-sync endpoint был выделен в **отдельный** шаг и во всей остальной документации помечен как **Phase 2.4**; read API и scheduler, соответственно, сдвинулись на Phase 2.5+.
@@ -75,20 +76,20 @@ Phase 2.4 REST API         ← GET /api/issues
        ↓
 Phase 2.5 Scheduler        ← polling (после того как ручной sync стабилен) — Done
        ↓
-Phase 3 GitLab + Timeline  ← 3.1–3.6 Done; next 3.7 Read API
+Phase 3 GitLab + Timeline  ← 3.1–3.7 Done; next 3.8 Admin sync HTTP
 ```
 
 ---
 
-## Phase 3 — GitLab + Timeline (3.1–3.6 Done; next 3.7)
+## Phase 3 — GitLab + Timeline (3.1–3.7 Done; next 3.8)
 
-> **Статус (2026-07-17):** tasks **3.1–3.6 реализованы** в коде (182 теста). Next — **3.7** Read API. Design contract timeline: sort `occurred_at DESC`, empty/unknown key → `200` + `events: []`.  
+> **Статус (2026-07-17):** tasks **3.1–3.7 реализованы** в коде (191 тест). Next — **3.8** Admin sync HTTP. Timeline read: sort `occurred_at DESC`, empty/unknown key → `200` + `events: []`.  
 > Полный дизайн: [architecture.md](./architecture.md) § Phase 3, [database.md](./database.md) § Phase 3, [api.md](./api.md) § Phase 3, [integrations.md](./integrations.md).  
 > Seed репозиториев: [discovery.md](./discovery.md) §9.2 (`mptp-react-native`→frontend, `mptp8`→backend, `eltcbackend`→oracle).
 
 **Правило Phase 3 (как у Jira):** сначала **ручной** `POST /api/admin/sync/gitlab` (task **3.8**), потом reconcile-scheduler / webhooks. Не начинать с webhooks.
 
-**Первая ценность:** Issue Timeline заполняется событиями GitLab (ветки / commits / MR) без ручного ввода — данные уже пишутся в `activity_events` (3.5); read API — 3.7.
+**Первая ценность:** Issue Timeline заполняется событиями GitLab (ветки / commits / MR) без ручного ввода — данные пишутся в `activity_events` (3.5), читаются через Read API (3.7).
 
 | Task | Scope | **Не делать** на этом шаге | Done when | Status |
 |---|---|---|---|---|
@@ -98,8 +99,8 @@ Phase 3 GitLab + Timeline  ← 3.1–3.6 Done; next 3.7 Read API
 | **3.4 Git entities persistence** | Liquibase + domain: `branches`, `commits`, `merge_requests`; upsert из sync. **+ wiring:** `GitLabSyncService` читает список репо из PostgreSQL через `RepositoryPersistencePort` (не из yaml в production); yaml `gitlab.sync.repositories` — только mock/local/tests ([decisions.md](./decisions.md) Design notes) | `activity_events`, derived workstreams UI; dual SoT yaml+DB | После sync строки в БД; production sync list = `repositories` table only | **Done** |
 | **3.5 Linking + activity_events** | Извлечение `issue_key` (regex), запись `activity_events` (`BRANCH_CREATED`/`COMMIT`/`MR_*`); soft-link orphan | Jenkins/pipelines, Activity Feed screen, Risks | События с ключом → Timeline queryable | **Done** |
 | **3.6 Workstreams** | `domain.workstream`: upsert `Workstream = Issue × Type` при первой Git-активности; derived status (минимум) | Release Health %, auto shell-`qa`, People | Workstreams в БД для linked issues | **Done** |
-| **3.7 Read API** | `GET /api/issues/{key}/timeline`, `GET /api/workstream-types`; опц. workstreams в `GET /api/issues/{key}` | Activity Feed, Board, Release Health, pagination | curl → JSON Timeline из PostgreSQL | **Next** |
-| **3.8 Admin sync HTTP** | `POST /api/admin/sync/gitlab` + тот же Bearer admin-token | Новый auth, OIDC | Manual sync end-to-end | Не начат |
+| **3.7 Read API** | `GET /api/issues/{key}/timeline`, `GET /api/workstream-types`; опц. workstreams в `GET /api/issues/{key}` | Activity Feed, Board, Release Health, pagination | curl → JSON Timeline из PostgreSQL | **Done** |
+| **3.8 Admin sync HTTP** | `POST /api/admin/sync/gitlab` + тот же Bearer admin-token | Новый auth, OIDC | Manual sync end-to-end | **Next** |
 | **3.9 Reconcile scheduler** *(после 3.8)* | `sync.gitlab` scheduler / fixedDelay; webhooks — optional later | Kafka/Redis, distributed lock, Phase 5 pipelines | Фоновый reconcile без ручного POST | Не начат |
 
 ### Phase 3 out of scope (явно)
@@ -212,3 +213,5 @@ Out of MVP:
 **v2.7 (2026-07-17):** Task **3.4** расширен: вместе с git-entities — обязательный wiring `GitLabSyncService` → `RepositoryPersistencePort` (PostgreSQL SoT); yaml `gitlab.sync.repositories` только mock/local/tests. См. [decisions.md](./decisions.md).
 
 **v2.8 (2026-07-17):** Фактический статус: Phase **3.1–3.6 Done** (GitLab client → sync → config/git entities → activity_events → workstreams; 182 теста). Next — **3.7** Read API. Timeline contract (docs-only): `occurred_at DESC`, empty → `200` + `[]`.
+
+**v2.9 (2026-07-17):** Phase **3.7 Done** — `GET /api/issues/{key}/timeline`, `GET /api/workstream-types` (191 тест). Next — **3.8** Admin sync HTTP.

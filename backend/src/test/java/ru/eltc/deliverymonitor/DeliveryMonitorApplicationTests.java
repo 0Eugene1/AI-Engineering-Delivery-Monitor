@@ -109,4 +109,28 @@ class DeliveryMonitorApplicationTests {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo("[]");
     }
+
+    @Test
+    void timelineEndpointIsPublicAndReturnsEmptyEventsForUnknownKey() {
+        // Phase 3.7: empty timeline is 200 + events:[], not 404 — even when the issue key is
+        // unknown and no IssueEntity exists.
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "http://localhost:" + port + "/api/issues/UNKNOWN-SMOKE/timeline", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"issueKey\":\"UNKNOWN-SMOKE\"");
+        assertThat(response.getBody()).contains("\"events\":[]");
+    }
+
+    @Test
+    void workstreamTypesEndpointIsPublicAndReturnsSeededTypes() {
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "http://localhost:" + port + "/api/workstream-types", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"code\":\"backend\"");
+        assertThat(response.getBody()).contains("\"displayName\":\"Backend\"");
+    }
 }

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.10 |
+| **Version** | 2.11 |
 | **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md), [security.md](./security.md) |
 
 ## Overview
@@ -84,11 +84,11 @@ PostgreSQL  →  domain.issue  →  api.issue
 | `domain.workstream_type` | **Phase 3.3 реализовано:** справочник типов (Liquibase seed, не хардкод) | Yes |
 | `domain.repository` | **Phase 3.3 реализовано:** GitLab project → `workstream_type_code` (таблица `repositories`; matching по `gitlab_project_id`, не по path/name); `RepositoryPersistencePort` | Yes |
 | `domain.gitlab` | **Phase 3.4 реализовано:** persistence `branches` / `commits` / `merge_requests` + upsert ports; wired из `sync.gitlab` | Yes |
-| `domain.timeline` | **Phase 3.5 реализовано (write):** `IssueKeyExtractor` + `activity_events` upsert; **read API** — Phase 3.7. Activity Feed read — Phase 4 | Yes |
+| `domain.timeline` | **Phase 3.5 write + 3.7 read:** `IssueKeyExtractor` + `activity_events` upsert; Timeline Read API (`api.issue.TimelineController`). Activity Feed read — Phase 4 | Yes |
 | `domain.activity` | Командный activity feed (read API — Phase 4; пишет в ту же `activity_events`) | Yes (Phase 4 UI) |
 | `domain.release` | Release Health по fixVersion | Yes |
 | `domain.risk` | Правила рисков | Yes |
-| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, без бизнес-логики, реюзает `JiraSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API, **реализовано**: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`, тонкий HTTP-адаптер), `IssueQueryService` (read-only, `@Transactional(readOnly = true)`, маппинг `IssueEntity → IssueResponse`), `IssueResponse`/`ErrorResponse` (DTO). Зависит только от `domain.issue` — без `sync.jira`/`integration.jira`/`JiraClient`, без live Jira. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
+| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4 + Phase 3.7). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, без бизнес-логики, реюзает `JiraSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`), `TimelineController` (`GET /api/issues/{key}/timeline` — только `activity_events`, `occurred_at DESC`, empty → `200` + `[]`, без требования `IssueEntity`), `IssueQueryService` / `TimelineQueryService`, DTO. `api.workstream` — `WorkstreamTypeController` (`GET /api/workstream-types`). Зависит только от domain — без live Jira/GitLab. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
 | AI Summary service | REST → LLM → markdown | After MVP |
 
 ## Core abstractions
@@ -126,9 +126,9 @@ PostgreSQL  →  domain.issue  →  api.issue
 
 См. [decisions.md](./decisions.md) и каталог [adr/](./adr/).
 
-## Phase 3 — GitLab + Timeline (3.1–3.6 Done; next 3.7)
+## Phase 3 — GitLab + Timeline (3.1–3.7 Done; next 3.8)
 
-> Design status: **approved**. Реализация по [roadmap.md](./roadmap.md) 3.1–3.9: **3.1–3.6 done**; next **3.7** Read API (`timeline` + `workstream-types`).
+> Design status: **approved**. Реализация по [roadmap.md](./roadmap.md) 3.1–3.9: **3.1–3.7 done**; next **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`).
 
 ### Целевая зависимость пакетов (зеркало Jira)
 

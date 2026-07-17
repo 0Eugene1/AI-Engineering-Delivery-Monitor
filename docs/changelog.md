@@ -10,6 +10,14 @@
 
 ### Documentation
 
+- **Docs sync после Phase 3.7:** актуализированы статусы во всех entry-point документах под фактический код (191 тест). `roadmap.md` v2.9 — 3.7 Done, next 3.8; `ai_context.md` v2.13; `architecture.md` v2.11; `api.md` v2.7; корневой `README.md`, `backend/README.md`, `structure.md`.
+
+### Added
+
+- **Phase 3.7 Read API**: `GET /api/issues/{key}/timeline` (`api.issue.TimelineController` / `TimelineQueryService` / `TimelineResponse`) — только PostgreSQL `activity_events`, `ORDER BY occurred_at DESC`; пустой/неизвестный key → `200` + `events: []` (не `404`, не требует `IssueEntity`). `GET /api/workstream-types` (`api.workstream.WorkstreamTypeController` / `WorkstreamTypeQueryService` / `WorkstreamTypeResponse`) — активные типы из seed. `GET /api/issues/{key}` не менялся. **Не** добавлялись: write API, dashboard/UI, scheduler, security, Jira/GitLab live calls, новые persistence-слои, nested workstreams на issue. Тесты (+9): `TimelineControllerTest` (2), `TimelineQueryServiceIntegrationTest` (3), `WorkstreamTypeControllerTest` (1), `WorkstreamTypeQueryServiceIntegrationTest` (1), `DeliveryMonitorApplicationTests` (+2). `.\mvnw.cmd clean verify` — 191 тест (было 182), 0 failures, 0 errors, 2 skipped. **Отклонения:** QueryService-слой (симметрия Issue); derived `summary`; `actor.id`=username; `sortOrder` в WorkstreamTypeResponse; nested event DTOs в TimelineResponse.
+
+### Documentation
+
 - **Docs sync после Phase 3.1–3.6:** актуализированы статусы во всех entry-point документах под фактический код (182 теста). `roadmap.md` v2.8 — 3.1–3.6 Done, next 3.7; `ai_context.md` v2.12; `architecture.md` v2.10; корневой `README.md`, `backend/README.md`, `structure.md`. Код в этом шаге не менялся.
 
 ### Added

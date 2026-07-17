@@ -1,6 +1,6 @@
 # Backend
 
-Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.6** (GitLab client → sync → config/git entities → activity_events → workstreams) done. **Next:** Phase **3.7** Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`). Not yet: admin GitLab sync HTTP (3.8), GitLab scheduler (3.9), Jenkins, frontend.
+Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.7** (GitLab client → sync → config/git entities → activity_events → workstreams → Read API) done. **Next:** Phase **3.8** Admin sync HTTP (`POST /api/admin/sync/gitlab`). Not yet: GitLab scheduler (3.9), Jenkins, frontend.
 
 ## Stack
 
@@ -41,7 +41,7 @@ cd backend
 .\mvnw.cmd clean verify
 ```
 
-The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **182** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
+The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **191** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
 
 ## Package layout
 
@@ -64,8 +64,9 @@ src/main/java/ru/eltc/deliverymonitor/
 └── api/
     ├── admin/                  # Phase 2.4 — POST /api/admin/sync/jira
     ├── security/               # Phase 2.4 — Bearer admin-token baseline
-    └── issue/                  # Read API — GET /api/issues, GET /api/issues/{key}
-                                # (timeline endpoint → Phase 3.7)
+    ├── issue/                  # Read API — GET /api/issues, GET /api/issues/{key},
+    │                           #            GET /api/issues/{key}/timeline (Phase 3.7)
+    └── workstream/             # Phase 3.7 — GET /api/workstream-types
 ```
 
 See [docs/architecture.md](../docs/architecture.md) (Backend packages table) for the full planned package layout.
@@ -183,11 +184,13 @@ cd backend
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=gitlab-mock"
 ```
 
-**Not yet:** `POST /api/admin/sync/gitlab` (3.8), GitLab scheduler (3.9), timeline REST (3.7).
+**Not yet:** `POST /api/admin/sync/gitlab` (3.8), GitLab scheduler (3.9).
 
-## Read API (issues)
+## Read API (issues + timeline + workstream types)
 
-`api.issue.IssueController`: `GET /api/issues`, `GET /api/issues/{key}` — reads PostgreSQL only via `domain.issue`. `GET /api/sprints/current` deferred (no `sprints` table). Timeline endpoint — Phase 3.7.
+- `api.issue.IssueController`: `GET /api/issues`, `GET /api/issues/{key}` — PostgreSQL via `domain.issue`. `GET /api/sprints/current` deferred (no `sprints` table).
+- `api.issue.TimelineController`: `GET /api/issues/{key}/timeline` — PostgreSQL `activity_events` only (`occurred_at DESC`); empty/unknown key → `200` + `events: []` (no `IssueEntity` required).
+- `api.workstream.WorkstreamTypeController`: `GET /api/workstream-types` — active seeded types.
 
 ## Migrations
 
@@ -197,9 +200,8 @@ Current: `0001` baseline → `0002` issues → `0003` workstream_types → `0004
 
 ## Next task
 
-Phase **3.1–3.6** done. Stop here until explicitly told to continue.
+Phase **3.1–3.7** done. Stop here until explicitly told to continue.
 
-Дальше по порядку (не начинать без явного go-ahead): Phase **3.7** —
-`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`
-→ **3.8** `POST /api/admin/sync/gitlab` → **3.9** GitLab reconcile scheduler.
+Дальше по порядку (не начинать без явного go-ahead): Phase **3.8** —
+`POST /api/admin/sync/gitlab` → **3.9** GitLab reconcile scheduler.
 См. [roadmap.md](../docs/roadmap.md).
