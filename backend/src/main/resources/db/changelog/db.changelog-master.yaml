@@ -5,4 +5,20 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/0002-issues.yaml
       relativeToChangelogFile: false
-  # Next changesets: sprints / sync_state (deferred, see docs/database.md), workstream domain.
+  - include:
+      file: db/changelog/changes/0003-workstream-types.yaml
+      relativeToChangelogFile: false
+  - include:
+      file: db/changelog/changes/0004-repositories.yaml
+      relativeToChangelogFile: false
+  - include:
+      file: db/changelog/changes/0005-git-entities.yaml
+      relativeToChangelogFile: false
+  - include:
+      file: db/changelog/changes/0006-activity-events.yaml
+      relativeToChangelogFile: false
+  - include:
+      file: db/changelog/changes/0007-workstreams.yaml
+      relativeToChangelogFile: false
+  # Next changesets: timeline / workstream read API (Phase 3.7).
+  # sprints / sync_state remain deferred (docs/database.md).

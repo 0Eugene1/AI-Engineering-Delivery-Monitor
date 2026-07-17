@@ -161,7 +161,7 @@ erDiagram
 | `issues` | key, summary, status, assignee_id, sprint_id, fix_version | Якорь |
 | `workstream_types` | code PK, display_name, sort_order, is_active | Типы потоков |
 | `workstreams` | issue_id, workstream_type_code, owner_id, derived_status | issue × type |
-| `repositories` | gitlab_id, name, workstream_type_code | Repo → type |
+| `repositories` | gitlab_project_id UK, path, name, workstream_type_code | Repo → type (match by id, not path) |
 | `branches` / `commits` / `merge_requests` / `builds` | … + issue_key | Сырьё |
 | `activity_events` | occurred_at, issue_key, workstream_type_code, actor_id, type, payload | Timeline + Feed |
 | `dependencies` | from_ws, to_ws, type, source | Блокеры |

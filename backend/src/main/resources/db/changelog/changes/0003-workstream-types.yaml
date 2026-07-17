@@ -1,0 +1,71 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0003-workstream-types
+      author: delivery-monitor
+      comment: >-
+        Phase 3.3 Config persistence (docs/roadmap.md). Configurable Workstream Type
+        catalogue (ADR-002): `workstream_types` with seed for the current team
+        (backend/frontend/oracle/qa). Types are data, not hardcoded platform knowledge.
+        `repositories` (FK to `code`) arrives in 0004; branches/commits/MRs/
+        activity_events/workstreams are deliberately not created here.
+      changes:
+        - createTable:
+            tableName: workstream_types
+            columns:
+              - column:
+                  name: code
+                  type: VARCHAR(64)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sort_order
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 0003-workstream-types-seed
+      author: delivery-monitor
+      comment: >-
+        Seed Workstream Types for the current team (docs/database.md, docs/discovery.md §9.6).
+        Changing the set is a data change, not a domain-model release.
+      changes:
+        - insert:
+            tableName: workstream_types
+            columns:
+              - column: { name: code, value: backend }
+              - column: { name: display_name, value: Backend }
+              - column: { name: sort_order, valueNumeric: 1 }
+              - column: { name: is_active, valueBoolean: true }
+        - insert:
+            tableName: workstream_types
+            columns:
+              - column: { name: code, value: frontend }
+              - column: { name: display_name, value: Frontend }
+              - column: { name: sort_order, valueNumeric: 2 }
+              - column: { name: is_active, valueBoolean: true }
+        - insert:
+            tableName: workstream_types
+            columns:
+              - column: { name: code, value: oracle }
+              - column: { name: display_name, value: Oracle }
+              - column: { name: sort_order, valueNumeric: 3 }
+              - column: { name: is_active, valueBoolean: true }
+        - insert:
+            tableName: workstream_types
+            columns:
+              - column: { name: code, value: qa }
+              - column: { name: display_name, value: QA }
+              - column: { name: sort_order, valueNumeric: 4 }
+              - column: { name: is_active, valueBoolean: true }

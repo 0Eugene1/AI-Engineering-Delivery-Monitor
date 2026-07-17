@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| **Status** | Phase 2.4 — Admin Sync HTTP API done; read API next |
-| **Done** | 2.1 Jira Client · 2.2 Jira Sync · 2.3 Persistence · 2.4 Admin Sync HTTP API |
+| **Status** | Phase 3.1–3.6 done; next **3.7** Read API (timeline + workstream-types) |
+| **Done** | 2.1–2.5 Jira · 3.1 GitLab client · 3.2 sync · 3.3 config · 3.4 git entities · 3.5 activity_events · 3.6 workstreams |
 | **Team** | 9 people: 7 developers + 2 QA |
-| **Concept version** | 2.6 |
-| **App code** | Backend: Jira client + board provider + sync + DB upsert + admin sync REST endpoint (`POST /api/admin/sync/jira`) + Spring Security baseline ([backend/](./backend/)); no read API (`GET /api/issues`) / scheduler / frontend / GitLab / Jenkins yet |
+| **Concept version** | 2.9 |
+| **App code** | Backend: Jira full path (client → sync → DB → admin REST → read API → scheduler) + GitLab path through workstreams (`integration.gitlab` / `sync.gitlab` / `domain.*`, Liquibase `0003`–`0007`); **182** tests. Not yet: timeline/workstream-types REST (3.7), `POST /api/admin/sync/gitlab` (3.8), GitLab scheduler (3.9), frontend, Jenkins |
 
 ---
 
@@ -64,11 +64,11 @@ Monitor — read-only проекция поверх существующих и�
 
 ## Roadmap (short)
 
-0. Discovery → 1. Skeleton → **2.1–2.5 Jira** (Client → Sync → DB → API → Scheduler) → 3. GitLab + Timeline → 4. Feed + Risks → 5. CI + Release Health → 6. Pilot → 7. AI Summary  
+0. Discovery → 1. Skeleton → **2.1–2.5 Jira** (Client → Sync → DB → API → Scheduler) → **3. GitLab + Timeline** (3.1–3.6 done; 3.7 next) → 4. Feed + Risks → 5. CI + Release Health → 6. Pilot → 7. AI Summary  
 
 Детали: [docs/roadmap.md](./docs/roadmap.md).
 
-**Сейчас:** Phase 2.1–2.4 завершены (Jira client, sync orchestration, PostgreSQL persistence, admin sync REST endpoint `POST /api/admin/sync/jira` + минимальный Spring Security baseline — [ADR-012](./docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)). Следующий шаг — read API (`GET /api/issues`, `GET /api/sprints/current`) и Phase 2.5 scheduler.
+**Сейчас:** Phase 2.1–2.5 и Phase 3.1–3.6 завершены. GitLab sync пишет branches/commits/MRs, `activity_events` и workstreams в PostgreSQL. Следующий шаг — Phase **3.7** Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`), затем 3.8 admin sync HTTP и 3.9 reconcile scheduler.
 
 ---
 
@@ -77,7 +77,7 @@ Monitor — read-only проекция поверх существующих и�
 ```text
 AI-Engineering-Delivery-Monitor/
 ├── docs/                 # Source of Truth (Markdown + ADR)
-├── backend/              # Spring Boot — Jira integration, sync, domain.issue, api (admin/security)
+├── backend/              # Spring Boot — Jira + GitLab sync, domain.*, api (admin/issue/security)
 ├── frontend/             # React UI (not started)
 ├── docker/               # Compose / local Postgres
 ├── scripts/              # Dev/ops helpers
@@ -99,7 +99,7 @@ AI-Engineering-Delivery-Monitor/
    **Не** используйте `C:\Program Files\...`.
 2. Прочитайте [docs/vision.md](./docs/vision.md) и [docs/architecture-overview.md](./docs/architecture-overview.md).
 3. Для AI-сессий откройте [docs/ai_context.md](./docs/ai_context.md).
-4. Backend можно запустить локально: см. [backend/README.md](./backend/README.md) / [docker/README.md](./docker/README.md). Для офлайн-разработки без Jira-токена — профиль `jira-mock`. REST API, scheduler, frontend, GitLab и Jenkins — ещё не реализованы.
+4. Backend: см. [backend/README.md](./backend/README.md) / [docker/README.md](./docker/README.md). Офлайн без токенов — профили `jira-mock` и/или `gitlab-mock`. Frontend и Jenkins — ещё не реализованы. Timeline REST (3.7) и `POST /api/admin/sync/gitlab` (3.8) — следующие шаги.
 
 ---
 

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "master",
+    "merged": false,
+    "protected": true,
+    "default": true,
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/tree/master",
+    "commit": {
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "short_id": "aaaaaaaa",
+      "title": "[DEMO] chore: baseline master",
+      "message": "[DEMO] chore: baseline master\n",
+      "author_name": "Demo Author",
+      "author_email": "demo@example.com",
+      "authored_date": "2026-07-01T10:00:00.000Z",
+      "committer_name": "Demo Author",
+      "committer_email": "demo@example.com",
+      "committed_date": "2026-07-01T10:00:00.000Z",
+      "web_url": "https://git.eltc.ru/mptp/mptp8/-/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "name": "feature/MPTPSUPP-90001_demo-banner",
+    "merged": false,
+    "protected": false,
+    "default": false,
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/tree/feature/MPTPSUPP-90001_demo-banner",
+    "commit": {
+      "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "short_id": "bbbbbbbb",
+      "title": "MPTPSUPP-90001: [DEMO] fix payment banner",
+      "message": "MPTPSUPP-90001: [DEMO] fix payment banner\n",
+      "author_name": "Demo Dev",
+      "author_email": "dev@example.com",
+      "authored_date": "2026-07-10T12:00:00.000Z",
+      "committer_name": "Demo Dev",
+      "committer_email": "dev@example.com",
+      "committed_date": "2026-07-10T12:00:00.000Z",
+      "web_url": "https://git.eltc.ru/mptp/mptp8/-/commit/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  {
+    "name": "feature/orphan-no-jira-key",
+    "merged": false,
+    "protected": false,
+    "default": false,
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/tree/feature/orphan-no-jira-key",
+    "commit": {
+      "id": "cccccccccccccccccccccccccccccccccccccccc",
+      "short_id": "cccccccc",
+      "title": "[DEMO] orphan branch without issue key",
+      "message": "[DEMO] orphan branch without issue key\n",
+      "author_name": "Demo Dev",
+      "author_email": "dev@example.com",
+      "authored_date": "2026-07-11T09:00:00.000Z",
+      "committer_name": "Demo Dev",
+      "committer_email": "dev@example.com",
+      "committed_date": "2026-07-11T09:00:00.000Z",
+      "web_url": "https://git.eltc.ru/mptp/mptp8/-/commit/cccccccccccccccccccccccccccccccccccccccc"
+    }
+  }
+]

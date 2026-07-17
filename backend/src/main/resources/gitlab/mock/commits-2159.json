@@ -1,0 +1,41 @@
+[
+  {
+    "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "short_id": "bbbbbbbb",
+    "title": "MPTPSUPP-90001: [DEMO] fix payment banner",
+    "message": "MPTPSUPP-90001: [DEMO] fix payment banner\n",
+    "author_name": "Demo Dev",
+    "author_email": "dev@example.com",
+    "authored_date": "2026-07-10T12:00:00.000Z",
+    "committer_name": "Demo Dev",
+    "committer_email": "dev@example.com",
+    "committed_date": "2026-07-10T12:00:00.000Z",
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/commit/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "id": "dddddddddddddddddddddddddddddddddddddddd",
+    "short_id": "dddddddd",
+    "title": "MPTPSUPP-90002: [DEMO] adjust timeout",
+    "message": "MPTPSUPP-90002: [DEMO] adjust timeout\n",
+    "author_name": "Demo Dev",
+    "author_email": "dev@example.com",
+    "authored_date": "2026-07-08T08:30:00.000Z",
+    "committer_name": "Demo Dev",
+    "committer_email": "dev@example.com",
+    "committed_date": "2026-07-08T08:30:00.000Z",
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/commit/dddddddddddddddddddddddddddddddddddddddd"
+  },
+  {
+    "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "short_id": "eeeeeeee",
+    "title": "[DEMO] chore without issue key",
+    "message": "[DEMO] chore without issue key\n",
+    "author_name": "Demo Dev",
+    "author_email": "dev@example.com",
+    "authored_date": "2026-06-20T15:00:00.000Z",
+    "committer_name": "Demo Dev",
+    "committer_email": "dev@example.com",
+    "committed_date": "2026-06-20T15:00:00.000Z",
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/commit/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  }
+]

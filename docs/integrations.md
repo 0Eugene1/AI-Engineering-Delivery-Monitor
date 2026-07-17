@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.1 |
+| **Version** | 2.2 |
 | **Related** | [architecture.md](./architecture.md), [database.md](./database.md), [glossary.md](./glossary.md) |
 
 ## Principles
@@ -61,16 +61,23 @@ sprint in openSprints() AND project = MPTPSUPP
 
 | | |
 |---|---|
-| Mode | **Webhook preferred** + reconcile scheduler 15–30 мин |
-| Auth | Project/Group token |
-| Mapping | `gitlab project → workstream_type_code` |
+| Mode | **Phase 3 start: manual poll** (`POST /api/admin/sync/gitlab`) → then reconcile scheduler; **webhook preferred** after manual path stable (ADR-004) |
+| Auth | Project/Group token (`PRIVATE-TOKEN`), env `GITLAB_TOKEN` |
+| Mapping | `gitlab project → workstream_type_code` via table `repositories` |
+| Base URL | `https://git.eltc.ru` ([discovery.md](./discovery.md) §9.2) |
 
-### What we sync
+### What we sync (Phase 3)
 
-- Push / branch create
+- Branches (create / list)
 - Commits
-- Merge Requests (open / update / merge)
-- Notes / approvals (по возможности API)
+- Merge Requests (open / update / merge; approvals if API available)
+- → `activity_events` + upsert `workstreams`
+
+### Explicitly deferred
+
+- **Pipelines** — Phase 5 (CI; для `mptp8` pipelines заменяют Jenkins)
+- Notes как отдельные сущности (достаточно MR state / optional approvals)
+- Full historical dump of default branch without issue key
 
 Oracle-разработка — **обычный GitLab (или Git) project** с `workstream_type_code = oracle` в конфиге. Отдельного «Oracle connector» нет.
 

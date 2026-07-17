@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Draft (MVP contract) |
-| **Version** | 2.4 |
+| **Version** | 2.6 |
 | **Style** | REST, JSON |
 | **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md), [security.md](./security.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) |
 
@@ -76,8 +76,37 @@ Response — отдельный DTO `IssueResponse` (не JPA entity):
 
 `GET /api/issues` возвращает JSON-массив таких объектов, без pagination/sorting/filtering/search.
 
-`timeline` — упорядоченный список `activity_events` по issue (главный UX). **Не реализовано** — `activity_events`
-ещё не существует ([database.md](./database.md) — Planned).
+`timeline` — упорядоченный список `activity_events` по issue (главный UX). **Phase 3.7 planned**
+(design contract зафиксирован 2026-07-17 — см. § Phase 3 ниже и [decisions.md](./decisions.md)).
+
+### Phase 3 — planned read / admin endpoints (design approved; 3.1–3.6 implemented)
+
+| Endpoint | Назначение | Зависит от |
+|---|---|---|
+| `GET /api/workstream-types` | Активные типы для UI pills | `workstream_types` seed |
+| `GET /api/issues/{key}/timeline` | Issue Timeline (hero) | `activity_events` |
+| `GET /api/issues/{key}` *(расширение)* | Опционально: вложенные `workstreams[]` + derived status | `workstreams` |
+| `POST /api/admin/sync/gitlab` | Ручной GitLab sync (зеркало Jira) | `sync.gitlab` + Bearer admin-token |
+
+#### `GET /api/issues/{key}/timeline` — contract (перед Phase 3.7)
+
+- Источник: только PostgreSQL `activity_events WHERE issue_key = ?`.
+- **Сортировка:** `ORDER BY occurred_at DESC` — самое новое сверху.
+- **Пустой результат:** `200 OK`, не `404`. Нет событий (и/или нет строки в `issues`) — валидный ответ с пустым списком.
+- **Не** требует существования `IssueEntity` (в отличие от `GET /api/issues/{key}`).
+
+Пример пустого ответа:
+
+```json
+{
+  "issueKey": "UNKNOWN",
+  "events": []
+}
+```
+
+**Не в Phase 3:** `GET /api/activity` (Feed — Phase 4), `GET /api/releases/.../health`, `GET /api/risks`, `POST /hooks/gitlab` можно отложить до после manual sync (ADR-004 preferred webhook — но **после** 3.8), pipelines API.
+
+Controllers **не создаются** до go-ahead на реализацию соответствующей подфазы.
 
 ### Admin sync (Phase 2.4 — implemented, до scheduler)
 

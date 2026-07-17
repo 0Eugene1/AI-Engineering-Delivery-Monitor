@@ -1,6 +1,6 @@
 # Backend
 
-Spring Boot modular monolith. **Status:** Skeleton (Phase 1) done; Jira REST Client (Phase 2.1), board context provider (Task 2.3), Jira Sync application layer (Phase 2.2), issue persistence (Phase 2.3) and the admin sync HTTP API + minimal Spring Security baseline (Phase 2.4) done. **Not yet:** read API (`GET /api/issues`), scheduler, GitLab or Jenkins.
+Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.6** (GitLab client → sync → config/git entities → activity_events → workstreams) done. **Next:** Phase **3.7** Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`). Not yet: admin GitLab sync HTTP (3.8), GitLab scheduler (3.9), Jenkins, frontend.
 
 ## Stack
 
@@ -41,36 +41,34 @@ cd backend
 .\mvnw.cmd clean verify
 ```
 
-The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring.
+The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **182** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
 
 ## Package layout
 
 ```text
 src/main/java/ru/eltc/deliverymonitor/
 ├── DeliveryMonitorApplication.java
-├── integration/jira/           # Jira REST client + board context provider
-│   ├── config/                 # JiraProperties (jira.*) + WebClient bean
-│   ├── auth/                   # Basic / Bearer(PAT) authentication strategies
-│   ├── client/                 # JiraClient — getMyself(), search(), searchByFilter()
-│   ├── dto/                    # Jira REST API v2 response DTOs (records)
-│   ├── provider/               # JiraContextProvider (rest/mock, switched by jira.mode)
-│   └── exception/              # JiraClientException
-├── sync/jira/                  # Phase 2.2 — sync orchestration (application layer)
-│   ├── JiraSyncService         # page-by-page fetch via JiraContextProvider
-│   ├── JiraIssueSnapshot       # normalized issue DTO (seam to persistence)
-│   ├── JiraSyncResult          # aggregates: fetched/created/updated/errors
-│   └── JiraSyncProperties      # jira.sync.page-size
-├── domain/issue/               # Phase 2.3 — persistence
-│   ├── IssueEntity             # JPA entity (issues + fix_versions + labels)
-│   ├── IssueRepository         # findAllByJiraIdIn
-│   ├── IssuePersistencePort    # upsertPage(...) seam for sync layer
-│   └── IssueUpsertService      # page-by-page upsert, match by jiraId
-└── api/                        # Phase 2.4 — HTTP layer
-    ├── admin/                  # JiraSyncController — POST /api/admin/sync/jira
-    └── security/               # SecurityConfig + AdminTokenAuthenticationFilter + AdminTokenProperties
+├── integration/
+│   ├── jira/                   # Phase 2.1 — Jira REST client + board context provider
+│   └── gitlab/                 # Phase 3.1 — GitLab REST client (rest/mock)
+├── sync/
+│   ├── jira/                   # Phase 2.2 + 2.5 — Jira sync + scheduler
+│   └── gitlab/                 # Phase 3.2+ — GitLab sync (entities, events, workstreams)
+├── domain/
+│   ├── issue/                  # Phase 2.3 — issues persistence
+│   ├── workstream_type/        # Phase 3.3 — workstream_types seed
+│   ├── repository/             # Phase 3.3 — observed GitLab repos (SoT)
+│   ├── gitlab/                 # Phase 3.4 — branches / commits / merge_requests
+│   ├── timeline/               # Phase 3.5 — IssueKeyExtractor + activity_events
+│   └── workstream/             # Phase 3.6 — Workstream = Issue × Type
+└── api/
+    ├── admin/                  # Phase 2.4 — POST /api/admin/sync/jira
+    ├── security/               # Phase 2.4 — Bearer admin-token baseline
+    └── issue/                  # Read API — GET /api/issues, GET /api/issues/{key}
+                                # (timeline endpoint → Phase 3.7)
 ```
 
-See [docs/architecture.md](../docs/architecture.md) (Backend packages table) for the full planned package layout; packages are added when their phase starts, not ahead of time.
+See [docs/architecture.md](../docs/architecture.md) (Backend packages table) for the full planned package layout.
 
 ## Jira REST client (Phase 2.1)
 
@@ -93,6 +91,8 @@ committed; `JIRA_USERNAME`/`JIRA_TOKEN` are empty by default.
 | `JIRA_DEFAULT_FILTER_ID` | `30532` | Board filter id (`docs/discovery.md` §9.1) |
 | `JIRA_MODE` | `rest` | Board context source: `rest` (real Jira) or `mock` (offline demo data) |
 | `JIRA_SYNC_PAGE_SIZE` | `50` | Page size for `JiraSyncService` pagination |
+| `JIRA_SYNC_ENABLED` | `false` | Enable background Jira scheduler |
+| `JIRA_SYNC_INTERVAL` | `5m` | Fixed-delay between scheduled sync runs |
 
 `JiraClient` methods: `getMyself()` (auth smoke test), `search(jql, startAt, maxResults, fields)`,
 `searchByFilter(filterId, startAt, maxResults)`. All return `Mono<...>`; non-2xx responses raise
@@ -124,16 +124,17 @@ cd backend
 profile is active, and the fixture is explicitly marked as demo/sanitized. Switching to real Jira when
 a token becomes available is a config change only (`JIRA_TOKEN` + `jira.mode=rest`) — no code change.
 
-## Jira Sync (Phase 2.2)
+## Jira Sync (Phase 2.2) + Scheduler (Phase 2.5)
 
 `sync.jira.JiraSyncService.syncBoard()` orchestrates page-by-page fetch via `JiraContextProvider`,
-normalizes each wire `JiraIssueDto` into `JiraIssueSnapshot`, and returns `JiraSyncResult`
-(`startedAt`/`finishedAt`/`fetched`/`pages`/`created`/`updated`/`mocked`/`errors`).
+normalizes each wire `JiraIssueDto` into `JiraIssueSnapshot`, upserts via `IssuePersistencePort`,
+and returns `JiraSyncResult` (`startedAt`/`finishedAt`/`fetched`/`pages`/`created`/`updated`/`mocked`/`errors`).
 
 `JiraClientException` is caught and written to `errors` — the run returns whatever was fetched before
 the failure. Database errors are **not** masked and propagate up.
 
-**Exposed via HTTP since Phase 2.4:** `POST /api/admin/sync/jira` (`api.admin.JiraSyncController`) — see the Admin Sync HTTP API section below.
+**HTTP:** `POST /api/admin/sync/jira` (`api.admin.JiraSyncController`).  
+**Scheduler:** `JiraSyncScheduler` (`SchedulingConfigurer`, `fixedDelay`) — same `syncBoard()`; gated by `jira.sync.enabled`.
 
 ## Persistence (Phase 2.3)
 
@@ -159,18 +160,46 @@ header matching `DELIVERY_MONITOR_ADMIN_TOKEN`; `/actuator/health` stays public.
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `DELIVERY_MONITOR_ADMIN_TOKEN` | *(empty)* | Bearer token gating `/api/admin/**`; a **separate** secret from `JIRA_TOKEN`, fail-fast if unset |
+| `DELIVERY_MONITOR_ADMIN_TOKEN` | *(empty)* | Bearer token gating `/api/admin/**`; a **separate** secret from `JIRA_TOKEN` / `GITLAB_TOKEN`, fail-fast if unset |
+
+## GitLab (Phase 3.1–3.6)
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `GITLAB_BASE_URL` | *(see application.yml)* | GitLab API base URL |
+| `GITLAB_TOKEN` | *(empty)* | `PRIVATE-TOKEN` header |
+| `GITLAB_MODE` | `rest` | `rest` or `mock` (offline fixtures) |
+| `GITLAB_SYNC_PAGE_SIZE` | `50` | Pagination for branches/commits/MRs |
+| `GITLAB_SYNC_COMMIT_HISTORY_DAYS` | `30` | Commit fetch window (`since`) |
+
+- **3.1** `integration.gitlab` — `GitLabClient` / `RestGitLabClient` / `MockGitLabClient`.
+- **3.2–3.6** `sync.gitlab.GitLabSyncService` — sync observed repos from PostgreSQL (`RepositoryPersistencePort`); upserts branches/commits/MRs; stamps `issue_key`; writes `activity_events`; upserts workstreams. Yaml `gitlab.sync.repositories` — mock/local/tests only.
+- Liquibase: `0003-workstream-types`, `0004-repositories`, `0005-git-entities`, `0006-activity-events`, `0007-workstreams`.
+
+Offline GitLab:
+
+```powershell
+cd backend
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=gitlab-mock"
+```
+
+**Not yet:** `POST /api/admin/sync/gitlab` (3.8), GitLab scheduler (3.9), timeline REST (3.7).
+
+## Read API (issues)
+
+`api.issue.IssueController`: `GET /api/issues`, `GET /api/issues/{key}` — reads PostgreSQL only via `domain.issue`. `GET /api/sprints/current` deferred (no `sprints` table). Timeline endpoint — Phase 3.7.
 
 ## Migrations
 
 Liquibase changesets live in `src/main/resources/db/changelog/changes/`, included from `db.changelog-master.yaml`. Add one changeset per logical change; never edit an already-applied changeset.
 
+Current: `0001` baseline → `0002` issues → `0003` workstream_types → `0004` repositories → `0005` git entities → `0006` activity_events → `0007` workstreams.
+
 ## Next task
 
-Phase **2.1** (Jira REST Client + auth), Task **2.3** (board context provider), Phase **2.2** (Jira Sync),
-Phase **2.3** (Persistence) and Phase **2.4** (admin sync HTTP API + Spring Security baseline,
-[ADR-012](../docs/adr/0012-minimal-auth-baseline-admin-endpoints.md)) are done — stop here until explicitly told to continue.
+Phase **3.1–3.6** done. Stop here until explicitly told to continue.
 
-Дальше по порядку (не начинать без явного go-ahead): **read API** —
-`GET /api/issues`, `GET /api/sprints/current` (read from PostgreSQL, not live Jira)
-→ Phase 2.5 scheduler. См. [roadmap.md](../docs/roadmap.md).
+Дальше по порядку (не начинать без явного go-ahead): Phase **3.7** —
+`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`
+→ **3.8** `POST /api/admin/sync/gitlab` → **3.9** GitLab reconcile scheduler.
+См. [roadmap.md](../docs/roadmap.md).

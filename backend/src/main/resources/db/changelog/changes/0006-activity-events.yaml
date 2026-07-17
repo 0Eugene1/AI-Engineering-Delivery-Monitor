@@ -1,0 +1,74 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0006-activity-events
+      author: delivery-monitor
+      comment: >-
+        Phase 3.5 Linking + activity_events (docs/roadmap.md, docs/database.md, ADR-008).
+        Single fact table for Issue Timeline and (later) Activity Feed. Idempotency via
+        UNIQUE (`source`, `source_ref`). `issue_key` nullable (orphan GitLab objects /
+        events without a Jira key are still persisted). No workstreams / timeline API /
+        Jenkins / pipelines in this changeset.
+      changes:
+        - createTable:
+            tableName: activity_events
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: occurred_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: issue_key
+                  type: VARCHAR(64)
+              - column:
+                  name: workstream_type_code
+                  type: VARCHAR(64)
+              - column:
+                  name: actor_username
+                  type: VARCHAR(200)
+              - column:
+                  name: actor_display_name
+                  type: VARCHAR(255)
+              - column:
+                  name: type
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: CLOB
+              - column:
+                  name: source
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_ref
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: activity_events
+            columnNames: source, source_ref
+            constraintName: uk_activity_events_source_source_ref
+        - createIndex:
+            tableName: activity_events
+            indexName: idx_activity_events_issue_key_occurred_at
+            columns:
+              - column:
+                  name: issue_key
+              - column:
+                  name: occurred_at
+        - createIndex:
+            tableName: activity_events
+            indexName: idx_activity_events_occurred_at
+            columns:
+              - column:
+                  name: occurred_at

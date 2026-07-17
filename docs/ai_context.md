@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
-| **Version** | 2.8 |
-| **Stage** | Phase 2.1 — Jira Client: done; Task 2.3 (board context provider): done; Phase 2.2 (Jira Sync) — application layer done (`sync.jira`); Phase 2.3 (Persistence) — done (`domain.issue`, page-by-page upsert); Phase 2.4 (Admin Sync HTTP API) — done (`api.admin`, `api.security`, ADR-012); Read API — done (`api.issue`: `GET /api/issues`, `GET /api/issues/{key}`; `GET /api/sprints/current` deliberately deferred — no `sprints` persistence); Phase 2.5 (Scheduler) — done (`sync.jira.JiraSyncScheduler`, `fixedDelay`, `jira.sync.enabled`/`jira.sync.interval`, in-process guard in `JiraSyncService`); Phase 3 (GitLab + Timeline) — next |
-| **Last updated** | 2026-07-15 |
+| **Version** | 2.12 |
+| **Stage** | Phase 2.1–2.5 done. Phase 3: **3.1–3.6 implemented** (GitLab → activity_events → workstreams; 182 tests). Next: **3.7** Read API (`timeline` + `workstream-types`). Then 3.8 admin sync HTTP, 3.9 scheduler |
+| **Last updated** | 2026-07-17 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
 
@@ -44,8 +44,14 @@
 | Admin Sync HTTP API (Phase 2.4) | Done — `POST /api/admin/sync/jira` (`api.admin.JiraSyncController`, тонкий HTTP-адаптер над `sync.jira.JiraSyncService`, реюз `JiraSyncResult`) + минимальный security-baseline (`api.security`: `SecurityConfig`/`AdminTokenAuthenticationFilter`/`AdminTokenProperties`, Bearer `DELIVERY_MONITOR_ADMIN_TOKEN`, stateless, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md)). **Без** OIDC/JWT/LDAP/users/roles/UI/scheduler/audit database/incremental sync. См. [session_log.md](./session_log.md) |
 | Read API | Done — пакет `api.issue`: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`, `404` при отсутствии), `IssueQueryService` (`@Transactional(readOnly = true)`, Entity → `IssueResponse` DTO). Зависит **только** от `domain.issue`. **`GET /api/sprints/current` сознательно отложен** — нет `sprints` persistence, без mock/stub/live-Jira substitute (TODO в [discovery.md](./discovery.md)). Security baseline/sync flow не менялись. См. [session_log.md](./session_log.md) |
 | Scheduler (Phase 2.5) | Done — `sync.jira.JiraSyncScheduler` (`SchedulingConfigurer`, `ScheduledTaskRegistrar.addFixedDelayTask`, **не** `fixedRate`), env-driven `jira.sync.enabled` (default `false`)/`jira.sync.interval` (default `5m`), `@EnableScheduling` на `DeliveryMonitorApplication`. Вызывает ровно тот же `JiraSyncService.syncBoard()`, что manual `POST /api/admin/sync/jira` — не вызывает `Controller`, не вызывает `JiraClient` напрямую, не обходит `JiraSyncService`. In-process guard (`AtomicBoolean`) в `JiraSyncService` не даёт manual и scheduled sync выполняться одновременно — без HTTP `409`, без изменения формы `JiraSyncResult`. **Без** `sync_state`, distributed lock, incremental sync, retry framework. См. [session_log.md](./session_log.md) |
+| Phase 3.1–3.2 GitLab client + sync | Done — `integration.gitlab`, `sync.gitlab`. См. [session_log.md](./session_log.md) |
+| Phase 3.3 Config persistence | Done — `domain.workstream_type`, `domain.repository`, Liquibase seed (`0003`/`0004`). См. [session_log.md](./session_log.md) |
+| Phase 3.4 Git entities + sync wiring | Done — `domain.gitlab` (`branches`/`commits`/`merge_requests`, `0005`); production SoT = `repositories` via `RepositoryPersistencePort`; yaml только mock/local/tests. См. [session_log.md](./session_log.md) |
+| Phase 3.5 Linking + activity_events | Done — `domain.timeline` (`IssueKeyExtractor`, `ActivityEvent*`, `0006`); GitLab sync штампует `issue_key` и пишет `BRANCH_CREATED`/`COMMIT`/`MR_*`. См. [session_log.md](./session_log.md) |
+| Phase 3.6 Workstreams | Done — `domain.workstream` (`WorkstreamUpsertService`, derived status, `0007`); upsert при Git-активности с `issue_key`; `repository_id` nullable; auto shell-`qa` нет. См. [session_log.md](./session_log.md) |
+| Phase 3.7–3.9 Read API / admin sync / scheduler | **Next 3.7:** `GET /api/issues/{key}/timeline`, `GET /api/workstream-types`. Затем 3.8–3.9. **Не** pipelines/Jenkins/Feed/Risks/AI |
 
-Discovery и Skeleton завершены. **Jira integration + sync + issue persistence + admin sync HTTP API + read API + scheduler реализованы** (Phase 2.1–2.5). Следующий явный этап — Phase 3 (GitLab + Timeline); `GET /api/sprints/current` ждёт sprint persistence; GitLab/Jenkins и frontend — не начаты. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
+Discovery и Skeleton завершены. **Jira Phase 2.1–2.5** и **Phase 3.1–3.6** реализованы (`.\mvnw.cmd clean verify` — 182 теста). Next: **3.7** Read API. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
 
 ---
 

@@ -54,6 +54,32 @@ jira:
     username: ${JIRA_USERNAME:}
     token: ${JIRA_TOKEN:}
 
+# GitLab REST client (Phase 3.1, docs/discovery.md §9.2) + sync orchestration (Phase 3.2).
+# HTTP client + PRIVATE-TOKEN auth + wire DTOs; sync.gitlab normalizes into snapshots.
+# No persistence/scheduler/pipelines/controllers yet (docs/roadmap.md tasks 3.3+).
+# Secrets from env, never committed. Mock mode allows a blank token (offline fixtures).
+gitlab:
+  base-url: ${GITLAB_BASE_URL:https://git.eltc.ru}
+  connect-timeout: ${GITLAB_CONNECT_TIMEOUT:5s}
+  response-timeout: ${GITLAB_RESPONSE_TIMEOUT:10s}
+  # GitLabClient data source: rest = real GitLab API, mock = sanitized demo fixtures
+  # (classpath:gitlab/mock/). Default rest. Enable mock via the 'gitlab-mock' Spring profile
+  # (see application-gitlab-mock.yml); mock is refused when a production profile is active.
+  mode: ${GITLAB_MODE:rest}
+  # Project / Group / Personal Access Token → PRIVATE-TOKEN header. Required when mode=rest.
+  token: ${GITLAB_TOKEN:}
+  # GitLab sync — application-layer orchestration over GitLabClient + domain persistence.
+  sync:
+    # Page size (per_page) when paginating branches / commits / merge requests.
+    page-size: ${GITLAB_SYNC_PAGE_SIZE:50}
+    # Commit history depth → GitLab API `since` (docs/architecture.md Commit History Policy).
+    # Full historical import is out of Phase 3.
+    commit-history-days: ${GITLAB_SYNC_COMMIT_HISTORY_DAYS:30}
+    # Observed repo list for production (gitlab.mode=rest) comes from PostgreSQL
+    # `repositories` via RepositoryPersistencePort (Phase 3.4.1 Single SoT) — not from yaml.
+    # For mock/local, set gitlab.sync.repositories under profile `gitlab-mock`
+    # (see application-gitlab-mock.yml).
+
 # Minimal admin auth baseline (Phase 2.4, ADR-012). Gates POST /api/admin/** with a static Bearer
 # token — stateless check, no user identity is derived from it (docs/security.md §2, §7).
 # DELIVERY_MONITOR_ADMIN_TOKEN is a separate secret from JIRA_TOKEN (different trust boundaries,

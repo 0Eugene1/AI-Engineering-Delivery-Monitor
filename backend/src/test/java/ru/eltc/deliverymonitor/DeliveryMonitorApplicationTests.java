@@ -44,6 +44,9 @@ class DeliveryMonitorApplicationTests {
         // only, not a real secret; adminSyncJiraRequiresAuthentication below never presents it,
         // so it never reaches JiraSyncService (no real Jira/PostgreSQL call from this test).
         registry.add("delivery-monitor.admin.token", () -> "test-only-placeholder-admin-token");
+        // GitLabProperties requires GITLAB_TOKEN when gitlab.mode=rest (default). Placeholder
+        // only — this smoke test never calls GitLabClient.
+        registry.add("gitlab.token", () -> "test-only-placeholder-gitlab-token");
     }
 
     private static Path tempDbFile() {

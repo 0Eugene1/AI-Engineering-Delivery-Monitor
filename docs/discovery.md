@@ -391,7 +391,7 @@ Repo без маппинга = **orphan / слепая зона** ([ADR-002](./a
 | `[TODO]` | Финальный набор типов | Тимлид: «есть ли devops, analytics, …» | Согласование в §9.5 |
 | `[TODO]` | `display_name` и `sort_order` | Тимлид + UX на Board | Порядок колонок на mock/wireframe |
 | `[TODO]` | Неактивные типы (`is_active = false`) | Тимлид | Нужны ли сейчас |
-| `[TODO]` | Как детектировать `qa` без Git-веток | Тимлид + QA: Jira status / assignee? | Источник события `WORKSTREAM_STARTED` |
+| `[TODO]` | Как детектировать *когда* стартовал `qa` (Jira status / assignee / …) | Тимлид + QA | Источник события `WORKSTREAM_STARTED`; **модель** допускает workstream без Git (`repository_id` null) — закрыто 2026-07-17 |
 
 ---
 

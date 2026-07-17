@@ -18,6 +18,466 @@
 
 ---
 
+## 2026-07-17 — Docs sync: статус Phase 3.1–3.6 + commit/push
+
+**Stage:** docs sync (после реализации 3.1–3.6). Код не менялся в этом шаге — только актуализация `.md` под фактический статус.
+
+**Summary:**
+
+Сверены и обновлены документы, которые ещё писали «Phase 3 не начат» / «next 3.4»:
+
+| Файл | Что исправлено |
+|---|---|
+| `roadmap.md` (v2.8) | Фактический статус: 3.1–3.6 **Done**, next **3.7**; таблица tasks со Status |
+| `ai_context.md` (v2.12) | Stage → 3.1–3.6 done; next 3.7 |
+| `architecture.md` (v2.10) | Пакеты + Phase 3 header под 3.1–3.6 |
+| `README.md` / `backend/README.md` / `structure.md` | Status, Done, package layout, Next |
+
+**Docs touched:** перечисленные выше + `session_log.md`, `changelog.md`.
+
+**Code touched:** none (в этом шаге); ранее не закоммиченный код Phase 3.1–3.6 уходит в тот же push.
+
+**Next:** go-ahead → Phase **3.7** Read API.
+
+---
+
+## 2026-07-17 — Design checkpoint: Timeline sort + empty response (перед Phase 3.7)
+
+**Stage:** docs-only (перед Phase 3.7 Read API). Код **не** менялся.
+
+**Summary:**
+
+Закрыты два контрактных вопроса для `GET /api/issues/{key}/timeline`:
+
+| Вопрос | Решение |
+|---|---|
+| Порядок событий | `ORDER BY occurred_at DESC` (newest first) |
+| Нет событий / неизвестный key | `200 OK` + `{ "issueKey", "events": [] }` — **не** `404` |
+| Нужна ли строка в `issues`? | **Нет** — timeline читает только `activity_events` по path key |
+
+`GET /api/issues/{key}` по-прежнему `404`, если issue нет в Monitor — это другой endpoint.
+
+**Docs touched:** `docs/decisions.md`, `docs/architecture.md` (v2.9), `docs/database.md`, `docs/api.md` (v2.6), `docs/session_log.md`, `docs/changelog.md`.
+
+**Code touched:** none.
+
+**Next:** go-ahead → Phase **3.7** Read API (`timeline` + `workstream-types`).
+
+---
+
+## 2026-07-17 — Phase 3.6 Workstreams persistence + Git-driven upsert implemented
+
+**Stage:** Phase 3.6 «Workstreams» ([roadmap.md](./roadmap.md) task 3.6) — **реализован**. Код в `domain.workstream` + wiring в `sync.gitlab` + Liquibase. Сознательно **не** добавлялись: timeline API, dashboard, IssueEntity lookup (`issue_id`), Release Health, notifications, AI, auto shell-`qa`.
+
+**Summary:**
+
+1. **Liquibase** `0007-workstreams.yaml` — таблица `workstreams`; identity `UNIQUE (issue_key, workstream_type_code)`; `repository_id` / `issue_id` nullable FK; FK `workstream_type_code` → `workstream_types`.
+2. **`domain.workstream`:** `WorkstreamEntity` / `WorkstreamRepository` / `WorkstreamPersistencePort` / `WorkstreamUpsertCommand` / `WorkstreamUpsertOutcome` / `WorkstreamUpsertService` + `WorkstreamDerivedStatuses` (минимум: `not_started` / `in_progress` / `in_review` / `merged`).
+3. **`GitLabSyncService`:** при Git-активности с `issue_key` upsert workstream (`repository_id` = provenance репо; `issue_id = null`). Orphan без ключа workstream **не** создаёт. Derived status: branch/commit → `in_progress`; open MR → `in_review`; merged MR → `merged` (монотонный merge, без downgrade).
+
+**Decisions / отклонения:**
+
+- Порт назван **`WorkstreamPersistencePort`** (не bare `PersistencePort`) — симметрия с `IssuePersistencePort` / `ActivityEventPersistencePort`.
+- Добавлен **`WorkstreamDerivedStatuses`** (string constants + `rank`/`max`) — не было в явном списке классов ТЗ; нужен для минимального derived status.
+- **`issue_id` всегда null** в Phase 3.6 — IssueEntity lookup отложен (Design note: `IssueKeyResolver` later; «Jira lookup» out of scope).
+- `created`/`updated` в `GitLabSyncResult` теперь включают **и** git entities, **и** activity_events, **и** workstreams.
+- Batch collapse дублей `(issue_key, type)` внутри upsert; статус не понижается при weaker signal.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/.../domain/workstream/**`, Liquibase `0007` + master, `GitLabSyncService`, тесты.
+
+**Verify:** `.\mvnw.cmd clean verify` — **182** теста (было 170), 0 failures, 0 errors, 2 skipped.
+
+**Next:** Phase **3.7** — Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`).
+
+---
+
+## 2026-07-17 — Design checkpoint: workstream without Git (`repository_id` nullable)
+
+**Stage:** docs-only (перед Phase 3.6). Код **не** менялся.
+
+**Summary:**
+
+Закрыт открытый вопрос «qa без Git — пустой workstream»:
+
+| Вопрос | Решение |
+|---|---|
+| Workstream обязан иметь Git / known repository? | **Нет** |
+| `workstreams.repository_id` | **nullable** FK — provenance, не identity |
+| Identity (ADR-002) | UNIQUE `(issue_key, workstream_type_code)` |
+| Phase 3.6 Git writer | заполняет `repository_id` |
+| `qa` / non-Git | `repository_id = null`; без auto-shell на каждую issue |
+| Discovery §5 | остаётся только *источник сигнала* для старта `qa` |
+
+**Docs touched:** `docs/decisions.md`, `docs/database.md`, `docs/architecture.md`, `docs/discovery.md`, `docs/session_log.md`, `docs/changelog.md`.
+
+**Code touched:** none.
+
+**Next:** go-ahead → Phase **3.6** Workstreams persistence + upsert из Git sync.
+
+---
+
+## 2026-07-17 — Phase 3.5 issue-key extraction + activity_events implemented
+
+**Stage:** Phase 3.5 «Linking + activity_events» ([roadmap.md](./roadmap.md) task 3.5) — **реализован**. Код в `domain.timeline` + wiring в `sync.gitlab` + Liquibase. Сознательно **не** добавлялись: timeline API, workstreams, dashboard, Jira resolution (`IssueEntity` lookup), Jenkins, scheduler.
+
+**Summary:**
+
+1. **`domain.timeline.IssueKeyExtractor`** — чистый `extract(text) → Optional<String>`, regex `(?<key>[A-Z]+-\d+)`, без БД / Jira / `IssueEntity` (Design note перед 3.5).
+2. **Liquibase** `0006-activity-events.yaml` — таблица `activity_events`; idempotency `UNIQUE (source, source_ref)`; `issue_key` nullable (orphan policy).
+3. **Persistence:** `ActivityEventEntity` / `ActivityEventRepository` / `ActivityEventPersistencePort` / `ActivityEventUpsertCommand` / `ActivityEventUpsertOutcome` / `ActivityEventUpsertService`.
+4. **`GitLabSyncService`:** stamp `issue_key` на branches (name) / commits (message→title) / MRs (source_branch→title soft-link); пишет `BRANCH_CREATED` / `COMMIT` / `MR_OPENED`|`MR_MERGED` с `source=GITLAB` и стабильными `source_ref`. Orphan → `issue_key=null`, объект и событие сохраняются.
+
+**Decisions / отклонения:**
+
+- Порт назван **`ActivityEventPersistencePort`** (не bare `PersistencePort`) — симметрия с `IssuePersistencePort` / `BranchPersistencePort`.
+- Типы событий — **string constants** (`ActivityEventTypes`), не closed enum (новые writers без миграции кода enum).
+- `MR_APPROVED` константа есть; **writer не пишет** (нет approvals API в Phase 3) — только `MR_OPENED` / `MR_MERGED` по `state`.
+- `payload` — JSON string через Jackson `ObjectMapper` (Spring bean); колонка `CLOB`.
+- `created`/`updated` в `GitLabSyncResult` теперь включают **и** git entities, **и** activity_events.
+- FK на `workstream_types` / `issues` для `activity_events` **не** добавлялся (soft text refs, как в database.md).
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/.../domain/timeline/**`, Liquibase `0006` + master, `GitLabSyncService`, тесты.
+
+**Verify:** `.\mvnw.cmd clean verify` — **170** тестов (было 146), 0 failures, 0 errors, 2 skipped.
+
+**Next:** Phase **3.6** — workstreams (Issue × Type) при первой Git-активности с `issue_key`.
+
+---
+
+## 2026-07-17 — Design checkpoint: IssueKeyExtractor home (перед Phase 3.5)
+
+**Stage:** docs-only. Код **не** менялся.
+
+**Summary:**
+
+Где живёт extraction `issue_key` (regex / soft-link):
+
+| Выбор | Решение |
+|---|---|
+| Пакет | **`domain.timeline`** |
+| Имя | **`IssueKeyExtractor`** (`String → Optional<String>`) |
+| Не в | `GitLabSyncService` / любой `sync.*` |
+| Не в | `domain.issue` + имя `IssueKeyResolver` (Resolver = lookup `IssueEntity` — другая роль) |
+
+Отдельный маленький компонент, **не** спрятанный внутрь создания `activity_events`: его вызывают sync (stamp на branches/commits/MRs) и timeline writer (поле события). Orphan → empty/`null`, запись всё равно идёт. GitHub/Jenkins позже реюзят тот же extractor.
+
+**Docs touched:** `docs/decisions.md`, `docs/architecture.md`, `docs/session_log.md`, `docs/changelog.md`.
+
+**Code touched:** none.
+
+**Next:** go-ahead → Phase **3.5** Linking + `activity_events`.
+
+---
+
+## 2026-07-17 — Phase 3.4.1 GitLab Sync persistence wiring implemented
+
+**Stage:** Phase 3.4.1 — закрывает dual source после 3.3/3.4. Код в `sync.gitlab` (+ конфиг). Сознательно **не** добавлялись: `activity_events`, issue-key extraction, timeline, workstreams, REST API, scheduler.
+
+**Summary:**
+
+1. **Production (`gitlab.mode=rest`):** `GitLabSyncService.syncAll()` берёт список **только** из `RepositoryPersistencePort.findAllOrdered()` — yaml `gitlab.sync.repositories` **игнорируется**.
+2. **Mock (`gitlab.mode=mock`):** yaml фильтрует проекты; каждый `gitlab-id` резолвится в seeded `repositories` row (FK `repository_id` всё равно из БД). Список перенесён в `application-gitlab-mock.yml` (только 2159 — покрытие fixtures).
+3. **Upsert:** после fetch → snapshots → `BranchPersistencePort` / `CommitPersistencePort` / `MergeRequestPersistencePort` (`issue_key=null`).
+4. **`GitLabSyncResult`:** агрегаты `created`/`updated`/`saved()`; список snapshots убран (как `JiraSyncResult` после 2.3).
+
+**Decisions / отклонения:**
+
+- Инжект **портов** (`*PersistencePort`), не конкретных `*UpsertService` — Spring всё равно даёт service beans; симметрия с `sync.jira → IssuePersistencePort`.
+- Upsert **per-project** (после полной выгрузки проекта), не page-by-page как Jira — текущий fetch копит страницы в snapshot.
+- Mock yaml без строки в БД → error в `errors`, sync остальных продолжается.
+- `workstreamTypeCode` в snapshots берётся из **DB** entity (не из yaml), даже в mock.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `GitLabSyncService`, `GitLabSyncResult`, `GitLabSyncProperties`, `application.yml`, `application-gitlab-mock.yml`, `GitLabSyncServiceTest` (13 тестов).
+
+**Verify:** `.\mvnw.cmd clean verify` — **146** тестов (было 144), 0 failures, 0 errors, 2 skipped.
+
+**Next:** Phase **3.5** — issue-key extraction + `activity_events`.
+
+---
+
+## 2026-07-17 — Phase 3.4 GitLab entities persistence implemented
+
+**Stage:** Phase 3.4 «Git entities persistence» ([roadmap.md](./roadmap.md) task 3.4) — **частично реализован** (git entities). Код только в `domain.gitlab` + Liquibase. Сознательно **не** добавлялись: `activity_events`, timeline, workstreams, issue-key extraction/linking, REST API, scheduler, security. **`sync.gitlab` не подключён к persistence** (ни upsert git-сущностей, ни wiring списка репо на `RepositoryPersistencePort`) — по явному scope этой реализации; dual yaml+DB остаётся долгом.
+
+**Summary:**
+
+1. **Liquibase** `0005-git-entities.yaml` — таблицы `branches`, `commits`, `merge_requests` с FK `repository_id` → `repositories.id`.
+2. **Matching:** branches — `(repository_id, name)`; commits — `(repository_id, sha)`; merge_requests — `(repository_id, gitlab_iid)`.
+3. **`domain.gitlab`:** entities + Spring Data repos + `*PersistencePort` / `*UpsertCommand` / `*UpsertOutcome` / `*UpsertService` для каждой сущности. `issue_key` nullable (orphan policy; linking — 3.5). `synced_at` на каждой строке.
+
+**Decisions / отклонения:**
+
+- Колонка FK названа **`repository_id`** (не черновой `repo_id` из database.md sketch).
+- MR iid колонка — **`gitlab_iid`** (не bare `iid`) — как в ТЗ.
+- Пакет **единый** `domain.gitlab` (не split branch/commit/mr) — вариант из architecture.md.
+- Доп. поля сверх минимального эскиза (из sync snapshots): `tip_commit_sha`/`web_url` на branches; `short_id`/`title`/`web_url` на commits; `gitlab_id`/`target_branch`/`author_*`/`gitlab_created_at`/`gitlab_updated_at`/`web_url` на MRs.
+- **Wiring sync → DB SoT отложен** относительно roadmap/decisions Design note («обязателен в 3.4») — явный scope этой задачи: только persistence слой, без изменения `sync.gitlab`.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/.../domain/gitlab/**`, Liquibase `0005` + master, тесты (+17).
+
+**Verify:** `.\mvnw.cmd clean verify` — **144** теста (было 127), 0 failures, 0 errors, 2 skipped (`JiraSmokeTest` без токена).
+
+**Next:**
+
+1. Wire `GitLabSyncService` → `RepositoryPersistencePort` (SoT) **и** upsert через `domain.gitlab` ports.
+2. Phase **3.5** — issue-key extraction + `activity_events`.
+3. Не трогать admin HTTP / Timeline API / pipelines до соответствующих подфаз.
+
+---
+
+## 2026-07-17 — Decision: sync repo list = PostgreSQL only (перед Phase 3.4)
+
+**Stage:** docs-only. Код **не** менялся. Закрывает главный technical debt после 3.3 (dual source yaml + DB).
+
+**Summary:**
+
+Зафиксировано ([decisions.md](./decisions.md) Design notes):
+
+- Dual source после 3.3 (**yaml** `gitlab.sync.repositories` + **seeded** `repositories` table) — нормален только до 3.4.
+- **В Phase 3.4 (обязательный wiring вместе с git-entities):**  
+  `repositories` table → `RepositoryPersistencePort` → `GitLabSyncService` → `GitLabClient`.
+- Production: `GitLabSyncService` **не** читает `GitLabSyncProperties.repositories`.
+- Yaml list — **только** mock / local dev / tests.
+- `page-size` / `commit-history-days` остаются в properties.
+
+**Docs touched:** `docs/decisions.md`, `docs/architecture.md` (v2.8), `docs/roadmap.md` (task 3.4), `docs/ai_context.md`, `docs/session_log.md`, `docs/changelog.md`.
+
+**Code touched:** none.
+
+**Next:** Phase **3.4** — git entities persistence **и** wiring sync → `RepositoryPersistencePort` (один SoT).
+
+---
+
+## 2026-07-17 — Phase 3.3 Config persistence (workstream_types + repositories) implemented
+
+**Stage:** Phase 3.3 «Config persistence» ([roadmap.md](./roadmap.md) task 3.3) — **реализован**. Код только в `domain.workstream_type` / `domain.repository` + Liquibase. Сознательно **не** добавлялись: `branches` / `commits` / `merge_requests` / `activity_events` / `workstreams` / pipelines / `sync_state`, REST API (`GET /api/workstream-types` → 3.7), scheduler, security изменения. `sync.gitlab` **не** переключён на БД — yaml `gitlab.sync.repositories` остаётся источником списка до отдельного шага.
+
+**Summary:**
+
+1. **Liquibase** `0003-workstream-types.yaml` — таблица `workstream_types` (`code` PK, `display_name`, `sort_order`, `is_active`) + seed `backend`/`frontend`/`oracle`/`qa`.
+2. **Liquibase** `0004-repositories.yaml` — таблица `repositories` (`id` PK, `gitlab_project_id` UNIQUE, `path`, `name`, `workstream_type_code` FK → `workstream_types.code`) + seed discovery §9.2: 760→frontend, 2159→backend, 3494→oracle.
+3. **`domain.workstream_type`:** `WorkstreamTypeEntity`, `WorkstreamTypeRepository` (`findByCode`, `findAllByActiveTrueOrderBySortOrderAsc`).
+4. **`domain.repository`:** `RepositoryEntity` (matching по `gitlabProjectId`, не path/name), `RepositoryJpaRepository`, `RepositoryPersistencePort` / `RepositoryUpsertCommand` / `RepositoryUpsertOutcome` / `RepositoryUpsertService` — шов для следующих этапов (обновление mutable path/name при rename).
+
+**Decisions / отклонения:**
+
+- Spring Data интерфейс назван **`RepositoryJpaRepository`**, не `RepositoryRepository` — избежание двойного `Repository` в имени типа; пакет остаётся `domain.repository`.
+- Seed `name` = leaf от `path` (например `mptp8`), не отдельное display name из GitLab API — mutable, обновится при будущем sync.
+- **`qa`** в seed типов есть; отдельного Git-репозитория для QA нет (как в discovery/architecture).
+- Dual source: БД seeded, но **`sync.gitlab` ещё читает yaml** — **осознанный долг 3.3**; закрытие зафиксировано отдельным Design note (см. запись выше): wiring в **Phase 3.4**, yaml только mock/local/tests.
+- `GET /api/workstream-types` — Phase 3.7 (roadmap: «можно вместе с 3.7»).
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/.../domain/workstream_type/**`, `backend/.../domain/repository/**`, Liquibase `0003`/`0004` + master, тесты (+11), комментарий в `application.yml`.
+
+**Verify:** `.\mvnw.cmd clean verify` — **127** тестов (было 116), 0 failures, 0 errors, 2 skipped (`JiraSmokeTest` без токена).
+
+**Next:**
+
+1. Phase **3.4** — git entities (`branches` / `commits` / `merge_requests`) **+** sync list → `RepositoryPersistencePort` (один SoT).
+2. Не трогать admin HTTP / Timeline API / pipelines до соответствующих подфаз.
+
+---
+
+## 2026-07-17 — Phase 3.3 design note: repositories match by gitlab_project_id
+
+**Stage:** Phase 3.3 «Config persistence» — **docs-only** уточнение перед кодом. Миграции / entities **не** создавались.
+
+**Summary:**
+
+Зафиксировано: таблица `repositories` обязана иметь внешний стабильный GitLab id:
+
+- `id` — внутренний PK
+- `gitlab_project_id` — **UNIQUE**, ключ matching при seed/sync
+- `path` / `name` — mutable (rename в GitLab не ломает строку)
+- `workstream_type_code` — тип потока (ADR-002)
+
+Аналогия с Phase 2.3: matching `issues` по `jira_id`, не по `key`. Имя колонки уточнено с чернового `gitlab_id` → `gitlab_project_id`.
+
+**Docs touched:** `docs/decisions.md`, `docs/database.md` (v2.4), `docs/architecture-overview.md`, `docs/session_log.md`, `docs/changelog.md`.
+
+**Code touched:** none.
+
+**Next:** go-ahead → реализация Phase 3.3 (`workstream_types` + `repositories` seed) с matching по `gitlab_project_id`.
+
+---
+
+## 2026-07-17 — Phase 3.2 GitLab Sync Application Layer implemented
+
+**Stage:** Phase 3.2 «GitLab Sync (manual)» ([roadmap.md](./roadmap.md) task 3.2) — **реализован**. Код только в `sync.gitlab`. Сознательно **не** добавлялись: JPA entities, Liquibase, controllers, Spring Security, scheduler, `activity_events` persistence, workstreams, issue-key extraction, pipelines.
+
+**Summary:**
+
+Новый пакет `ru.eltc.deliverymonitor.sync.gitlab` (зеркало стиля early Phase 2.2 `sync.jira` — оркестрация + snapshots без persistence):
+
+1. **`GitLabSyncService`** — `syncAll()` / `syncProject(projectIdOrPath)` поверх `GitLabClient`; пагинация branches / commits / MRs; `commit-history-days` → API `since`; MR list с `state=all`; нормализация wire DTO → snapshot-контракты слоя; `GitLabClientException` по проекту → `errors`, остальные репозитории продолжают.
+2. **`GitLabSyncResult`** — агрегаты (`projectsSynced`, `branchesFetched`, `commitsFetched`, `mergeRequestsFetched`, `pages`, `mocked`, `errors`) + derived `fetched()`; до persistence несёт `projects` (список `GitLabProjectSyncSnapshot`).
+3. **`GitLabSyncProperties`** (`gitlab.sync.*`): `page-size` (default 50), `commit-history-days` (default **30**), `repositories[]` (seed discovery §9.2: 760/frontend, 2159/backend, 3494/oracle) — временный источник списка проектов до таблицы `repositories` (Phase 3.3).
+4. Snapshots: `GitLabProjectSyncSnapshot`, `GitLabBranchSnapshot`, `GitLabCommitSnapshot`, `GitLabMergeRequestSnapshot` (без `issueKey` — Phase 3.5).
+
+**Decisions / отклонения от дизайна:**
+
+- Список репозиториев из **yaml-конфига**, не из БД — таблица `repositories` ещё не создана (3.3); seed совпадает с discovery §9.2.
+- Default `gitlab.sync.commit-history-days` = **30** (открытый вопрос в session_log закрыт при кодировании).
+- Snapshots **включены** в `GitLabSyncResult` (как early Phase 2.2 Jira до persistence); после 3.3–3.4 ожидается переход на агрегаты `created`/`updated` без полного списка в result.
+- Ошибка одного проекта **не** останавливает multi-repo run (изоляция per-project) — у Jira одна board, там иначе.
+- In-process concurrency guard **не** добавлен (scheduler — 3.9).
+- `issue_key` / orphan linking / `activity_events` / workstreams — **не** в 3.2.
+- Admin `POST /api/admin/sync/gitlab` — Phase 3.8.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/src/main/java/.../sync/gitlab/**`, `application.yml` (`gitlab.sync.*`), тесты (+16).
+
+**Verify:** `.\mvnw.cmd clean verify` — **116** тестов (было 100), 0 failures, 0 errors, 2 skipped (`JiraSmokeTest` без токена).
+
+**Next:**
+
+1. Phase **3.3** Config persistence (`workstream_types` + `repositories` seed) — и/или **3.4** git entities persistence.
+2. Не трогать admin HTTP / scheduler / Timeline API / pipelines до соответствующих подфаз.
+
+---
+
+## 2026-07-17 — Phase 3.1 GitLab REST Client implemented
+
+**Stage:** Phase 3.1 «GitLab REST Client» ([roadmap.md](./roadmap.md) task 3.1) — **реализован**. Код только в `integration.gitlab`. Сознательно **не** добавлялись: sync layer, persistence, Liquibase, controllers, scheduler, pipelines, Jenkins, approvals API.
+
+**Summary:**
+
+Новый пакет `ru.eltc.deliverymonitor.integration.gitlab` (зеркало стиля `integration.jira`, с отличием mock на уровне клиента — как в design decision):
+
+1. **`GitLabClient`** (интерфейс) + **`RestGitLabClient`** (`gitlab.mode=rest`, default) + **`MockGitLabClient`** (`gitlab.mode=mock`).
+2. **`GitLabProperties`** / **`GitLabClientConfig`**: `gitlab.base-url` ⇐ `GITLAB_BASE_URL` (default `https://git.eltc.ru`), timeouts, `gitlab.mode`, `gitlab.token` ⇐ `GITLAB_TOKEN` → заголовок **`PRIVATE-TOKEN`**.
+3. Wire DTO: `GitLabProjectDto`, `GitLabBranchDto`, `GitLabCommitDto`, `GitLabMergeRequestDto`, `GitLabUserDto`, `GitLabErrorResponseDto`.
+4. **`GitLabClientException`** — единый тип для HTTP- и transport-ошибок (как `JiraClientException`).
+5. API v4: `getProject`, `listBranches`, `listCommits` (с опциональным `since`), `listMergeRequests`, `getMergeRequest`.
+6. Mock fixtures: `classpath:gitlab/mock/*` (demo project **2159** / `mptp/mptp8`); prod-guard на профилях `prod`/`production`. Профиль `gitlab-mock` (`application-gitlab-mock.yml`).
+
+**Decisions / отклонения от дизайна:**
+
+- Mock на уровне **`GitLabClient`**, а не отдельного provider-слоя (как у Jira) — **по design** Phase 3 (`RestGitLabClient`/`MockGitLabClient` + `gitlab.mode`).
+- В **mock** режиме `GITLAB_TOKEN` **может быть пустым** (в отличие от Jira mock, где placeholder обязателен) — в духе «локальная разработка без `GITLAB_TOKEN`».
+- Approvals API (EE) **не** реализован в 3.1 — optional в architecture; достаточны list/detail MR.
+- `gitlab.sync.commit-history-days` **не** в `GitLabProperties` — принадлежит `sync.gitlab` (3.2); клиент уже принимает `Instant since`.
+
+**Docs touched:** `docs/session_log.md` (this entry), `docs/changelog.md`.
+
+**Code touched:** `backend/src/main/java/.../integration/gitlab/**`, fixtures, `application.yml`, `application-gitlab-mock.yml`, тесты (+25), `DeliveryMonitorApplicationTests` (placeholder `gitlab.token`).
+
+**Verify:** `.\mvnw.cmd clean verify` — **100** тестов (было 75), 0 failures, 0 errors, 2 skipped (`JiraSmokeTest` без токена).
+
+**Next:**
+
+1. Phase **3.2** GitLab Sync (manual) — `sync.gitlab`.
+2. Не трогать pipelines / Jenkins / persistence / Timeline API до соответствующих подфаз.
+
+---
+
+## 2026-07-17 — Phase 3 implementation decisions fixed (docs-only)
+
+**Stage:** Phase 3 «GitLab + Timeline» — **design остаётся approved**; зафиксированы четыре implementation decisions перед кодом. Код, миграции, ADR — **не создавались**.
+
+**Summary:**
+
+Перед стартом реализации 3.1 закрыты открытые вопросы discovery:
+
+1. **Activity Events Idempotency** — идемпотентная запись `activity_events`: поля `source` + `source_ref`, UNIQUE `(source, source_ref)`. GitLab (`source=GITLAB`): COMMIT → `<project_id>:<commit_sha>`; MR → `<project_id>:mr:<iid>`; BRANCH → `<project_id>:branch:<branch_name>`. Повторный sync не создаёт дублей.
+2. **GitLab Mock Mode** — `integration.gitlab`: `RestGitLabClient` + `MockGitLabClient`, режим через конфиг (`gitlab.mode`), для локальной разработки без `GITLAB_TOKEN`, тестов и CI (симметрия Jira).
+3. **Commit History Policy** — глубина через `gitlab.sync.commit-history-days` + GitLab API `since`; full historical import вне Phase 3.
+4. **Orphan GitLab Objects Policy** — branch/commit/MR без `issue_key` сохраняются (`issue_key=null`); `activity_event` пишется без Jira-связи; linked и unlinked поддерживаются одинаково.
+
+**Decisions:**
+
+- Новый ADR **не** создавался — решения в рамках ADR-001/003/004/008/011 ([decisions.md](./decisions.md) Design notes).
+- Phase 3 design status: **approved** (без смены scope: pipelines/Jenkins/Feed/AI по-прежнему вне фазы).
+
+**Docs touched:**
+
+- `docs/decisions.md` (новая строка Design notes — Phase 3 implementation decisions)
+- `docs/database.md` (v2.3 — idempotency, orphan, UNIQUE `(source, source_ref)`, nullable `issue_key`)
+- `docs/architecture.md` (v2.7 — mock client, commit-history, idempotency, orphan)
+- `docs/ai_context.md` (v2.10)
+- `docs/session_log.md` (this entry), `docs/changelog.md`
+
+**Code touched:** none.
+
+**Open before coding (осталось):**
+
+1. Реальный `GITLAB_TOKEN` (+ scopes).
+2. CE vs EE (approvals API).
+3. Naming coverage % (измерение; orphan policy уже зафиксирована).
+4. Источник `qa` workstream без Git.
+5. Конкретный default для `gitlab.sync.commit-history-days` при кодировании 3.2.
+
+**Next:**
+
+1. Явный go-ahead → **3.1 GitLab REST Client** (+ mock mode с первой подфазы).
+2. Код Phase 3 не писать без go-ahead.
+
+---
+
+## 2026-07-17 — Phase 3 GitLab + Timeline: architectural discovery approved (docs-only)
+
+**Stage:** Phase 3 «GitLab + Timeline» ([roadmap.md](./roadmap.md)) — **дизайн согласован, код не писался**. Миграции, entities, controllers, GitLab-клиент — сознательно не создавались.
+
+**Summary:**
+
+Проведён architectural discovery перед реализацией Phase 3 (первая ценность продукта: Issue Timeline из GitLab). Опора: vision/architecture/ux/database/api, ADR-001/002/004/008, discovery §2/§9.2/§9.3 (3 репо + naming).
+
+1. **Источники GitLab в Phase 3:** branches + commits + merge requests. **Pipelines — вне Phase 3** (CI → Phase 5; для `mptp8` pipelines = замена Jenkins).
+2. **API GitLab v4 (минимум):** projects, branches, commits, merge_requests (+ optional approvals EE). Auth: `PRIVATE-TOKEN` / `GITLAB_TOKEN`.
+3. **Таблицы Phase 3:** `workstream_types`, `repositories` (**не** `gitlab_projects`), `branches`, `commits`, `merge_requests`, `activity_events`, `workstreams`. Не нужны: pipelines, builds, people, sprints, sync_state.
+4. **Timeline:** отдельная `activity_events` — да (ADR-008). События Phase 3: `BRANCH_CREATED`, `COMMIT`, `MR_OPENED`/`MR_APPROVED`/`MR_MERGED`. Связь с Jira — `issue_key` через regex (branch / commit / MR source_branch; soft-link title).
+5. **Workstream:** тип из `repositories.workstream_type_code`; нужен отдельный `domain.workstream` + `domain.workstream_type`. `qa` без Git — открытый вопрос, не блокер Timeline.
+6. **Ingest:** manual sync first (`POST /api/admin/sync/gitlab`) → persistence → Timeline read API → reconcile scheduler; webhooks после стабильного manual path (как Jira).
+7. **Пакеты:** `integration.gitlab → sync.gitlab → domain.*` (зеркало Jira). Read: `GET /api/issues/{key}/timeline`, `GET /api/workstream-types`.
+8. **Запрещено в Phase 3:** AI Summary, Kafka, Redis, CQRS, GraphQL, notifications, Jenkins, Activity Feed UI, Risks, Release Health.
+
+**Decisions:**
+
+- Все решения в рамках ADR-001/002/003/004/008/011 — **новый ADR не создавался**.
+- Имя таблицы репозиториев остаётся `repositories` (отклонено `gitlab_projects`).
+- Pipelines отложены в Phase 5, несмотря на то что `mptp8` уже на GitLab CI.
+- `JIRA_STATUS`/`JIRA_COMMENT` не обязательны для Phase 3 done-when (GitLab-first Timeline).
+
+**Docs touched:**
+
+- `docs/roadmap.md` (v2.6 — Phase 3 tasks 3.1–3.9, статус Design approved)
+- `docs/architecture.md` (v2.6 — § Phase 3, пакеты gitlab/workstream/timeline)
+- `docs/database.md` (v2.2 — § Phase 3 tables)
+- `docs/api.md` (v2.5 — § Phase 3 endpoints)
+- `docs/integrations.md` (GitLab: manual sync first + Phase 3 scope)
+- `docs/decisions.md` (Design notes 2026-07-17)
+- `docs/ai_context.md` (v2.9)
+- `docs/session_log.md` (this entry), `docs/changelog.md`
+
+**Code touched:** none.
+
+**Open before coding (см. также discovery TODO):**
+
+1. Реальный `GITLAB_TOKEN` (+ scopes).
+2. CE vs EE (approvals API).
+3. ~~Политика orphan branches~~ → **закрыто** implementation decision (orphan сохраняется). Coverage % naming — измерить отдельно.
+4. Источник `qa` workstream без Git.
+5. ~~Нужен ли mock-режим~~ → **закрыто**: `RestGitLabClient`/`MockGitLabClient` + `gitlab.mode`.
+6. ~~Глубина истории commits~~ → **закрыто**: `gitlab.sync.commit-history-days` + API `since`.
+
+**Next:**
+
+1. Явный go-ahead на реализацию → начать с **3.1 GitLab REST Client** ([roadmap.md](./roadmap.md)).
+2. Не писать код Phase 3 без go-ahead; не трогать pipelines/Jenkins/Feed.
+
+---
+
 ## 2026-07-15 — Phase 2.5 Scheduler implemented: `JiraSyncScheduler` + in-process sync guard
 
 **Stage:** Phase 2.5 «Scheduler» ([roadmap.md](./roadmap.md)) — **реализована** строго по Scheduler Design, принятому перед этим этапом. Manual sync (`POST /api/admin/sync/jira`) остаётся рабочим и неизменным; scheduler переиспользует ровно тот же `JiraSyncService.syncBoard()`, никакого параллельного пути в Jira/БД не появилось. Сознательно **не добавлялись** (явные ограничения задачи): `sync_state` таблица, distributed lock (ShedLock/Redis), incremental sync, retry framework, новый persistence-слой, HTTP `409`, изменение существующего API-контракта.

@@ -1,0 +1,82 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0004-repositories
+      author: delivery-monitor
+      comment: >-
+        Phase 3.3 Config persistence (docs/roadmap.md, docs/database.md). Observed GitLab
+        projects mapped to Workstream Type. Matching key is the immutable numeric
+        `gitlab_project_id` (UNIQUE), not `path`/`name` — path and display name may change
+        on rename/move in GitLab (symmetry with `issues` matching by `jira_id`, not `key`).
+        Table name is `repositories`, not `gitlab_projects`. FK to `workstream_types.code`.
+        branches/commits/merge_requests/activity_events/workstreams/pipelines/sync_state
+        are deliberately not created in this phase.
+      changes:
+        - createTable:
+            tableName: repositories
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: gitlab_project_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: path
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: workstream_type_code
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: repositories
+            columnNames: gitlab_project_id
+            constraintName: uk_repositories_gitlab_project_id
+        - addForeignKeyConstraint:
+            baseTableName: repositories
+            baseColumnNames: workstream_type_code
+            referencedTableName: workstream_types
+            referencedColumnNames: code
+            constraintName: fk_repositories_workstream_type_code
+  - changeSet:
+      id: 0004-repositories-seed
+      author: delivery-monitor
+      comment: >-
+        Seed observed GitLab repositories from docs/discovery.md §9.2
+        (gitlab_id / path / workstream_type_code). Display `name` is the project
+        leaf name from path (mutable; updated later when sync sees a rename).
+      changes:
+        - insert:
+            tableName: repositories
+            columns:
+              - column: { name: gitlab_project_id, valueNumeric: 760 }
+              - column: { name: path, value: mptp/mptp-react-native }
+              - column: { name: name, value: mptp-react-native }
+              - column: { name: workstream_type_code, value: frontend }
+        - insert:
+            tableName: repositories
+            columns:
+              - column: { name: gitlab_project_id, valueNumeric: 2159 }
+              - column: { name: path, value: mptp/mptp8 }
+              - column: { name: name, value: mptp8 }
+              - column: { name: workstream_type_code, value: backend }
+        - insert:
+            tableName: repositories
+            columns:
+              - column: { name: gitlab_project_id, valueNumeric: 3494 }
+              - column: { name: path, value: SOFTCOMPANY/eltcbackend }
+              - column: { name: name, value: eltcbackend }
+              - column: { name: workstream_type_code, value: oracle }

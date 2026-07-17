@@ -1,0 +1,238 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0005-branches
+      author: delivery-monitor
+      comment: >-
+        Phase 3.4 Git entities persistence (docs/roadmap.md, docs/database.md). Feature
+        branches linked to observed `repositories` via `repository_id` FK. Matching key is
+        UNIQUE (`repository_id`, `name`). `issue_key` nullable (orphan policy — linking in
+        Phase 3.5). activity_events / workstreams / pipelines are deliberately not created.
+      changes:
+        - createTable:
+            tableName: branches
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: repository_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: issue_key
+                  type: VARCHAR(64)
+              - column:
+                  name: tip_commit_sha
+                  type: VARCHAR(64)
+              - column:
+                  name: last_commit_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: author_name
+                  type: VARCHAR(255)
+              - column:
+                  name: author_email
+                  type: VARCHAR(255)
+              - column:
+                  name: web_url
+                  type: VARCHAR(1024)
+              - column:
+                  name: synced_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: branches
+            columnNames: repository_id, name
+            constraintName: uk_branches_repository_id_name
+        - addForeignKeyConstraint:
+            baseTableName: branches
+            baseColumnNames: repository_id
+            referencedTableName: repositories
+            referencedColumnNames: id
+            constraintName: fk_branches_repository_id
+        - createIndex:
+            tableName: branches
+            indexName: idx_branches_issue_key
+            columns:
+              - column:
+                  name: issue_key
+
+  - changeSet:
+      id: 0005-commits
+      author: delivery-monitor
+      comment: >-
+        Phase 3.4: commits table. Matching key UNIQUE (`repository_id`, `sha`). Optional
+        `branch_id` FK to `branches` (nullable — list-commits API is not always branch-scoped).
+        `issue_key` nullable (orphan / Phase 3.5 linking).
+      changes:
+        - createTable:
+            tableName: commits
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: repository_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sha
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: branch_id
+                  type: BIGINT
+              - column:
+                  name: issue_key
+                  type: VARCHAR(64)
+              - column:
+                  name: short_id
+                  type: VARCHAR(64)
+              - column:
+                  name: title
+                  type: VARCHAR(1000)
+              - column:
+                  name: message
+                  type: VARCHAR(4000)
+              - column:
+                  name: author_name
+                  type: VARCHAR(255)
+              - column:
+                  name: author_email
+                  type: VARCHAR(255)
+              - column:
+                  name: committed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: web_url
+                  type: VARCHAR(1024)
+              - column:
+                  name: synced_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: commits
+            columnNames: repository_id, sha
+            constraintName: uk_commits_repository_id_sha
+        - addForeignKeyConstraint:
+            baseTableName: commits
+            baseColumnNames: repository_id
+            referencedTableName: repositories
+            referencedColumnNames: id
+            constraintName: fk_commits_repository_id
+        - addForeignKeyConstraint:
+            baseTableName: commits
+            baseColumnNames: branch_id
+            referencedTableName: branches
+            referencedColumnNames: id
+            constraintName: fk_commits_branch_id
+        - createIndex:
+            tableName: commits
+            indexName: idx_commits_issue_key
+            columns:
+              - column:
+                  name: issue_key
+
+  - changeSet:
+      id: 0005-merge-requests
+      author: delivery-monitor
+      comment: >-
+        Phase 3.4: merge_requests table. Matching key UNIQUE (`repository_id`, `gitlab_iid`)
+        — project-local GitLab MR iid, not the global id. Column named `gitlab_iid` (not bare
+        `iid`) for clarity at the SQL level. `issue_key` nullable (orphan / Phase 3.5).
+      changes:
+        - createTable:
+            tableName: merge_requests
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: repository_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: gitlab_iid
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: gitlab_id
+                  type: BIGINT
+              - column:
+                  name: issue_key
+                  type: VARCHAR(64)
+              - column:
+                  name: title
+                  type: VARCHAR(1000)
+              - column:
+                  name: state
+                  type: VARCHAR(64)
+              - column:
+                  name: source_branch
+                  type: VARCHAR(512)
+              - column:
+                  name: target_branch
+                  type: VARCHAR(512)
+              - column:
+                  name: author_username
+                  type: VARCHAR(255)
+              - column:
+                  name: author_display_name
+                  type: VARCHAR(255)
+              - column:
+                  name: gitlab_created_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: gitlab_updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: merged_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: web_url
+                  type: VARCHAR(1024)
+              - column:
+                  name: synced_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: merge_requests
+            columnNames: repository_id, gitlab_iid
+            constraintName: uk_merge_requests_repository_id_gitlab_iid
+        - addForeignKeyConstraint:
+            baseTableName: merge_requests
+            baseColumnNames: repository_id
+            referencedTableName: repositories
+            referencedColumnNames: id
+            constraintName: fk_merge_requests_repository_id
+        - createIndex:
+            tableName: merge_requests
+            indexName: idx_merge_requests_issue_key
+            columns:
+              - column:
+                  name: issue_key

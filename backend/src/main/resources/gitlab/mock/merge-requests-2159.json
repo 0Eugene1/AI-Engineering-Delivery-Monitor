@@ -1,0 +1,44 @@
+[
+  {
+    "id": 10001,
+    "iid": 88,
+    "project_id": 2159,
+    "title": "MPTPSUPP-90001: [DEMO] Fix payment banner",
+    "description": "[DEMO] sanitized merge request",
+    "state": "opened",
+    "merged_at": null,
+    "created_at": "2026-07-10T13:00:00.000Z",
+    "updated_at": "2026-07-10T14:00:00.000Z",
+    "source_branch": "feature/MPTPSUPP-90001_demo-banner",
+    "target_branch": "master",
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/merge_requests/88",
+    "author": {
+      "id": 1,
+      "username": "demo.dev",
+      "name": "Demo Dev",
+      "state": "active",
+      "web_url": "https://git.eltc.ru/demo.dev"
+    }
+  },
+  {
+    "id": 10002,
+    "iid": 87,
+    "project_id": 2159,
+    "title": "MPTPSUPP-90002: [DEMO] Adjust timeout",
+    "description": "[DEMO] already merged",
+    "state": "merged",
+    "merged_at": "2026-07-09T11:00:00.000Z",
+    "created_at": "2026-07-08T09:00:00.000Z",
+    "updated_at": "2026-07-09T11:00:00.000Z",
+    "source_branch": "feature/MPTPSUPP-90002_timeout",
+    "target_branch": "master",
+    "web_url": "https://git.eltc.ru/mptp/mptp8/-/merge_requests/87",
+    "author": {
+      "id": 1,
+      "username": "demo.dev",
+      "name": "Demo Dev",
+      "state": "active",
+      "web_url": "https://git.eltc.ru/demo.dev"
+    }
+  }
+]

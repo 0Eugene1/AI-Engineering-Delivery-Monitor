@@ -39,7 +39,7 @@ AI-Engineering-Delivery-Monitor/
 │   ├── session_log.md    # Журнал крупных этапов
 │   ├── changelog.md      # Человеческая история изменений
 │   └── …                 # vision, architecture, api, …
-├── backend/              # Spring Boot — Jira integration, sync, domain.issue, api (admin/security)
+├── backend/              # Spring Boot — Jira + GitLab sync, domain.*, api (admin/issue/security)
 ├── frontend/             # React dashboard (not started)
 ├── docker/               # docker-compose, local Postgres
 ├── scripts/              # Вспомогательные скрипты (migrate, seed, sync helpers)

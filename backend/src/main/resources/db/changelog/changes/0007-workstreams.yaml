@@ -1,0 +1,72 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0007-workstreams
+      author: delivery-monitor
+      comment: >-
+        Phase 3.6 Workstreams (docs/roadmap.md, docs/database.md, ADR-002).
+        Workstream = Issue × Workstream Type. Identity UNIQUE (`issue_key`,
+        `workstream_type_code`) — `repository_id` is nullable Git provenance only,
+        not part of uniqueness. Git-driven upsert fills `repository_id`; non-Git
+        types (e.g. qa) may live with `repository_id` null. `issue_id` nullable FK
+        (filled later when IssueEntity lookup exists). No timeline API / dashboard /
+        auto shell-qa rows in this changeset.
+      changes:
+        - createTable:
+            tableName: workstreams
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: issue_key
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: issue_id
+                  type: BIGINT
+              - column:
+                  name: repository_id
+                  type: BIGINT
+              - column:
+                  name: workstream_type_code
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: derived_status
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: workstreams
+            columnNames: issue_key, workstream_type_code
+            constraintName: uk_workstreams_issue_key_workstream_type_code
+        - addForeignKeyConstraint:
+            baseTableName: workstreams
+            baseColumnNames: workstream_type_code
+            referencedTableName: workstream_types
+            referencedColumnNames: code
+            constraintName: fk_workstreams_workstream_type_code
+        - addForeignKeyConstraint:
+            baseTableName: workstreams
+            baseColumnNames: repository_id
+            referencedTableName: repositories
+            referencedColumnNames: id
+            constraintName: fk_workstreams_repository_id
+        - addForeignKeyConstraint:
+            baseTableName: workstreams
+            baseColumnNames: issue_id
+            referencedTableName: issues
+            referencedColumnNames: id
+            constraintName: fk_workstreams_issue_id
+        - createIndex:
+            tableName: workstreams
+            indexName: idx_workstreams_repository_id
+            columns:
+              - column:
+                  name: repository_id

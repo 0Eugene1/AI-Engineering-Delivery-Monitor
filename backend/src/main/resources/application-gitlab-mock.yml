@@ -1,0 +1,20 @@
+# =============================================================================
+# OFFLINE / DEMO profile — activate with: --spring.profiles.active=gitlab-mock
+# =============================================================================
+# Enables MockGitLabClient, which serves SANITIZED DEMO data
+# (classpath:gitlab/mock/*) so the app can run and the layers on top of it can be
+# developed WITHOUT a real GITLAB_TOKEN.
+#
+# NEVER use this profile in production. MockGitLabClient additionally refuses to
+# start if a 'prod'/'production' profile is active, so mock demo data cannot ship to prod.
+gitlab:
+  mode: mock
+  # Token may stay blank in mock mode (GitLabProperties allows it when mode=mock).
+  token:
+  sync:
+    # Mock-only filter: which seeded repositories to sync. Resolved by gitlab_project_id
+    # against PostgreSQL `repositories` (FK still from DB). Fixtures cover project 2159.
+    repositories:
+      - gitlab-id: 2159
+        path: mptp/mptp8
+        workstream-type-code: backend

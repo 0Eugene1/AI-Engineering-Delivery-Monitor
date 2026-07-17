@@ -1,0 +1,10 @@
+{
+  "_comment": "SANITIZED DEMO DATA — not real GitLab content. Used only by MockGitLabClient (gitlab.mode=mock).",
+  "id": 2159,
+  "name": "mptp8",
+  "path": "mptp8",
+  "path_with_namespace": "mptp/mptp8",
+  "default_branch": "master",
+  "web_url": "https://git.eltc.ru/mptp/mptp8",
+  "description": "[DEMO] МП Техподдержка Goodline (Laravel 8)"
+}
