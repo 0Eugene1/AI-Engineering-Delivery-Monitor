@@ -75,6 +75,13 @@ gitlab:
     # Commit history depth → GitLab API `since` (docs/architecture.md Commit History Policy).
     # Full historical import is out of Phase 3.
     commit-history-days: ${GITLAB_SYNC_COMMIT_HISTORY_DAYS:30}
+    # Background reconcile scheduler (Phase 3.9, GitLabSyncScheduler). Disabled by default —
+    # manual sync (POST /api/admin/sync/gitlab) stays the only trigger unless explicitly enabled
+    # (docs/roadmap.md "manual sync first").
+    enabled: ${GITLAB_SYNC_ENABLED:false}
+    # fixedDelay between the end of one scheduled run and the start of the next (never fixedRate).
+    # Duration string, e.g. "10m", "90s", "PT10M".
+    interval: ${GITLAB_SYNC_INTERVAL:10m}
     # Observed repo list for production (gitlab.mode=rest) comes from PostgreSQL
     # `repositories` via RepositoryPersistencePort (Phase 3.4.1 Single SoT) — not from yaml.
     # For mock/local, set gitlab.sync.repositories under profile `gitlab-mock`

@@ -4,10 +4,12 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,6 +39,22 @@ public class GitLabSyncProperties {
     private int commitHistoryDays = 30;
 
     /**
+     * Whether the background reconcile ({@link GitLabSyncScheduler}, Phase 3.9) is active.
+     * Defaults to {@code false} — manual sync ({@code POST /api/admin/sync/gitlab}) stays the only
+     * way to trigger a sync unless this is explicitly enabled (docs/roadmap.md "manual sync
+     * first").
+     */
+    private boolean enabled = false;
+
+    /**
+     * Delay between the end of one scheduled sync run and the start of the next ({@code
+     * fixedDelay} semantics — never {@code fixedRate}: a slow/failed run must not cause overlapping
+     * runs). Env-driven, e.g. {@code GITLAB_SYNC_INTERVAL=10m}.
+     */
+    @NotNull
+    private Duration interval = Duration.ofMinutes(10);
+
+    /**
      * Mock / local / test filter of GitLab projects to sync when {@code gitlab.mode=mock}.
      * Ignored in {@code rest} (production) mode. Each entry must have {@code gitlab-id} that
      * exists in seeded {@code repositories}. Empty list → mock {@code syncAll()} fetches nothing.
@@ -59,6 +77,22 @@ public class GitLabSyncProperties {
 
     public void setCommitHistoryDays(int commitHistoryDays) {
         this.commitHistoryDays = commitHistoryDays;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public Duration getInterval() {
+        return interval;
+    }
+
+    public void setInterval(Duration interval) {
+        this.interval = interval;
     }
 
     public List<Repository> getRepositories() {

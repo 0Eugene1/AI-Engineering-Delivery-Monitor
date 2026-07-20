@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Draft (MVP contract) |
-| **Version** | 2.8 |
+| **Version** | 2.9 |
 | **Style** | REST, JSON |
 | **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md), [security.md](./security.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) |
 
@@ -84,7 +84,7 @@ Response — отдельный DTO `IssueResponse` (не JPA entity):
 `ActivityEventRepository.findAllByIssueKeyOrderByOccurredAtDesc`. Только PostgreSQL; без live Jira/GitLab;
 **не** требует `IssueEntity`. Пустой/неизвестный key → `200` + `{ "issueKey", "events": [] }`.
 
-### Phase 3 — read / admin endpoints (3.7–3.8 implemented; 3.9 next)
+### Phase 3 — read / admin endpoints (3.7–3.9 implemented; next Phase 4)
 
 | Endpoint | Назначение | Статус |
 |---|---|---|
@@ -95,7 +95,7 @@ Response — отдельный DTO `IssueResponse` (не JPA entity):
 
 #### `POST /api/admin/sync/gitlab` — contract (реализован в Phase 3.8)
 
-Зеркало `POST /api/admin/sync/jira`: `api.admin.GitLabSyncController` → `GitLabSyncService#syncAll()`, ответ — существующий `GitLabSyncResult` as-is (без отдельного DTO). Request body нет. Защита — тот же Bearer `DELIVERY_MONITOR_ADMIN_TOKEN` / `api.security` (ADR-012); без новой auth-логики. Mock e2e: после sync `GET /api/issues/{key}/timeline` отдаёт GitLab-события из PostgreSQL.
+Зеркало `POST /api/admin/sync/jira`: `api.admin.GitLabSyncController` → `GitLabSyncService#syncAll()`, ответ — существующий `GitLabSyncResult` as-is (без отдельного DTO). Request body нет. Защита — тот же Bearer `DELIVERY_MONITOR_ADMIN_TOKEN` / `api.security` (ADR-012); без новой auth-логики. Mock e2e + **Live E2E 2026-07-20** (rest+rest): после sync `GET /api/issues/{key}/timeline` отдаёт GitLab-события из PostgreSQL.
 
 #### `GET /api/issues/{key}/timeline` — contract (реализован в Phase 3.7)
 

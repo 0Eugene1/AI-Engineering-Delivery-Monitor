@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | **Project** | AI Engineering Delivery Monitor |
-| **Version** | 2.14 |
-| **Stage** | Phase 2.1–2.5 done. Phase 3: **3.1–3.8 implemented** (194 tests). **Milestone:** mock e2e Jira+GitLab → Timeline. Next: **3.9** reconcile scheduler (**design approved**) |
-| **Last updated** | 2026-07-17 |
+| **Version** | 2.16 |
+| **Stage** | Phase 2.1–2.5 done. Phase 3: **3.1–3.9 implemented**. **Milestone:** Live E2E 2026-07-20 (`jira.mode=rest` + `gitlab.mode=rest`, personal PATs) + mock path + reconcile scheduler. Next: Phase **4** |
+| **Last updated** | 2026-07-20 |
 
 > Прочитай этот файл **первым** в любом новом чате. Затем — [session_log.md](./session_log.md) и нужные документы из списка ниже.
 
@@ -50,10 +50,10 @@
 | Phase 3.5 Linking + activity_events | Done — `domain.timeline` (`IssueKeyExtractor`, `ActivityEvent*`, `0006`); GitLab sync штампует `issue_key` и пишет `BRANCH_CREATED`/`COMMIT`/`MR_*`. См. [session_log.md](./session_log.md) |
 | Phase 3.6 Workstreams | Done — `domain.workstream` (`WorkstreamUpsertService`, derived status, `0007`); upsert при Git-активности с `issue_key`; `repository_id` nullable; auto shell-`qa` нет. См. [session_log.md](./session_log.md) |
 | Phase 3.7 Read API | Done — `api.issue.TimelineController` (`GET /api/issues/{key}/timeline`, PostgreSQL only, `occurred_at DESC`, empty → `200` + `[]`); `api.workstream.WorkstreamTypeController` (`GET /api/workstream-types`). `GET /api/issues/{key}` не менялся. См. [session_log.md](./session_log.md) |
-| Phase 3.8 Admin sync HTTP | Done — `POST /api/admin/sync/gitlab` (`api.admin.GitLabSyncController` → `GitLabSyncService.syncAll()`, реюз `GitLabSyncResult`; тот же Bearer admin-token). Mock e2e до Timeline подтверждён. См. [session_log.md](./session_log.md) |
-| Phase 3.9 Reconcile scheduler | **Next** — design approved (зеркало `JiraSyncScheduler`: `sync.gitlab`, только `syncAll()`, guard в сервисе, `enabled=false`/`interval=10m`). **Не** pipelines/Jenkins/Feed/Risks/AI |
+| Phase 3.8 Admin sync HTTP | Done — `POST /api/admin/sync/gitlab` (`api.admin.GitLabSyncController` → `GitLabSyncService.syncAll()`, реюз `GitLabSyncResult`; тот же Bearer admin-token). Mock e2e до Timeline подтверждён. **Live E2E 2026-07-20** (rest+rest, personal PATs; service accounts TODO). См. [session_log.md](./session_log.md) |
+| Phase 3.9 Reconcile scheduler | Done — `sync.gitlab.GitLabSyncScheduler` (`SchedulingConfigurer`, `addFixedDelayTask`, **не** `fixedRate`), env-driven `gitlab.sync.enabled` (default `false`)/`gitlab.sync.interval` (default `10m`), вызывает только `GitLabSyncService.syncAll()`. In-process guard (`AtomicBoolean`) в `GitLabSyncService` — общий для manual и scheduled. **Без** `sync_state`, distributed lock, incremental, retry, webhooks. См. [session_log.md](./session_log.md) |
 
-Discovery и Skeleton завершены. **Jira Phase 2.1–2.5** и **Phase 3.1–3.8** реализованы (`.\mvnw.cmd clean verify` — 194 теста). **Milestone:** mock path Jira sync → GitLab sync → Issue Timeline. Next: **3.9** reconcile scheduler. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
+Discovery и Skeleton завершены. **Jira Phase 2.1–2.5** и **Phase 3.1–3.9** реализованы. **Milestone:** mock path + **Live E2E 2026-07-20** (rest+rest, personal PATs; ~3506 issues; 3 GitLab repos ~378/~480/~4782; ~5640 activity_events; sample `MPTPSUPP-43006`) + reconcile scheduler. Service accounts — TODO. Next: Phase **4**. Следовать [roadmap.md](./roadmap.md), не перескакивать этапы без явного решения.
 
 ---
 

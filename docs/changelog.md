@@ -10,6 +10,20 @@
 
 ### Documentation
 
+- **Docs sync после Live E2E + Phase 3.9:** entry-points выровнены под 3.1–3.9 Done / Live E2E 2026-07-20 / next Phase 4 / 199 tests: `ai_context.md` v2.16, `roadmap.md` v2.12, `architecture.md` v2.14, `integrations.md` v2.4, `api.md` v2.9, `discovery.md` (auth known + service accounts TODO), корневой `README.md`, `backend/README.md` (+ `run-local.cmd.example`).
+
+- **Live E2E validation: Jira + GitLab → Timeline (2026-07-20):** первая полноценная проверка без mock (`jira.mode=rest` + `gitlab.mode=rest`) на личных PAT. Поток: Jira+GitLab REST → Sync → PostgreSQL → Timeline. Снимок: ~3506 issues; 3 GitLab repos (~378 branches / ~480 commits / ~4782 MRs / ~5640 activity_events); sample `MPTPSUPP-43006`. Ops: `run-local.cmd.example`, `JIRA_RESPONSE_TIMEOUT=60s`, `NO_PROXY`. Код продукта не менялся. См. `session_log.md`.
+
+- **First real GitLab sync (2026-07-20):** операционная валидация live-пути `git.eltc.ru` → sync → PostgreSQL → Timeline на личном PAT (сначала с `jira-mock`). Результат: 3 проекта, ~376 branches / ~477 commits / ~4782 MRs, `mocked=false`, `errors=[]`; timeline проверен на `MPTPSUPP-43006`. См. `session_log.md`.
+
+### Added
+
+- **Phase 3.9 GitLab reconcile scheduler**: `sync.gitlab.GitLabSyncScheduler` — `SchedulingConfigurer` + `addFixedDelayTask` (`fixedDelay`, не `fixedRate`); `gitlab.sync.enabled` default `false` / `gitlab.sync.interval` default `10m` (`GITLAB_SYNC_ENABLED` / `GITLAB_SYNC_INTERVAL`); вызывает только `GitLabSyncService.syncAll()`. In-process `AtomicBoolean` guard в `GitLabSyncService` (общий для manual POST и scheduler); skip → `errors()` без смены `GitLabSyncResult` / без HTTP `409`. **Не** добавлялись: webhooks, incremental, retry, `sync_state`, distributed lock, новые endpoints, новый ADR. Тесты: `GitLabSyncSchedulerTest` (+4), concurrency guard в `GitLabSyncServiceTest` (+1). `.\mvnw.cmd clean verify` — 199 тестов (было 194), 0 failures, 0 errors, 2 skipped.
+
+### Documentation
+
+- **Docs sync после Phase 3.9:** `ai_context.md` v2.15, `roadmap.md` v2.11, `architecture.md` v2.13, `backend/README.md` — 3.9 Done; next Phase 4.
+
 - **Docs tidy (перед 3.9):** сверены entry-point docs со статусом 3.1–3.8 Done / 3.9 design approved / 194 tests. `database.md` v2.5 — таблицы Phase 3 помечены Real (`0003`–`0007`). `integrations.md` v2.3 — manual sync 3.8 Done. Историческая запись first local run уточнена.
 
 - **Phase 3.9 GitLab reconcile scheduler — design checkpoint (docs-only):** согласовано зеркало Phase 2.5 — `sync.gitlab.GitLabSyncScheduler` → только `GitLabSyncService.syncAll()`; in-process `AtomicBoolean` guard в сервисе; `gitlab.sync.enabled` default `false` / `interval` default `10m` (`GITLAB_SYNC_ENABLED`/`GITLAB_SYNC_INTERVAL`); `SchedulingConfigurer` + `fixedDelay`. Не в `api.admin`; не через Controller/`GitLabClient`. Out of scope: `sync_state`, distributed lock, incremental, retry, webhooks. Обновлены: `decisions.md`, `architecture.md`, `roadmap.md` (v2.10a), `session_log.md`. Код не писался. Новый ADR не создавался.

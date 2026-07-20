@@ -20,6 +20,7 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+backend/run-local.cmd
 *.pem
 *.key
 credentials*.json

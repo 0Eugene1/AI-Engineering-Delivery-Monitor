@@ -18,6 +18,132 @@
 
 ---
 
+## 2026-07-20 — Live E2E validation: Jira + GitLab → Timeline
+
+**Stage:** Operational validation (код продукта не менялся). Milestone: первый полный путь на production-like данных без mock.
+
+**Summary:** Проведена первая полноценная проверка Delivery Monitor на реальных корпоративных данных без mock-режима.
+
+Система успешно прошла полный поток:
+
+`Jira REST API + GitLab REST API → Sync Services → PostgreSQL → Timeline API`
+
+Использовались персональные токены (PAT) для подтверждения работоспособности интеграций. Production service account пока не используется.
+
+**Results:**
+
+| Источник | Значение |
+|---|---|
+| Jira | ~**3506** issues с board filter |
+| GitLab repos | 3 |
+| branches / commits / MRs | ~378 / ~480 / ~4782 |
+| activity_events | ~5640 |
+| API | `GET /api/issues/{key}` — реальные Jira issues; `GET /api/issues/{key}/timeline` — реальные Git-активности по тому же key |
+
+Пример: `MPTPSUPP-43006` — Jira issue из REST + branch/commit/MR из GitLab → Timeline через `activity_events`.
+
+**Validated:**
+
+- Jira REST authentication (`bearer` PAT)
+- GitLab REST authentication (`PRIVATE-TOKEN` / `read_api`)
+- GitLab API pagination
+- Jira issue synchronization
+- Git data ingestion
+- issue_key extraction
+- activity_events persistence
+- Timeline API
+- работа без mock-профилей (`jira.mode=rest`, `gitlab.mode=rest`)
+
+**Operational notes:**
+
+- Добавлено: `backend/run-local.cmd.example`; `backend/run-local.cmd` в `.gitignore` (токены не в репо).
+- Настройки прогона: `JIRA_RESPONSE_TIMEOUT=60s`; `NO_PROXY` для внутренних GitLab/Jira доменов (корпоративный proxy ломает TLS к `*.eltc.ru`).
+- Spring `Using generated security password` — шум default form-login; admin API = Bearer `DELIVERY_MONITOR_ADMIN_TOKEN`.
+
+**Not done:**
+
+- service account / Group Access Token
+- UI / Dashboard
+- Activity Feed / Risks (Phase 4)
+- production scheduler enablement
+- Jenkins integration
+
+**Docs touched:** `session_log.md`, `changelog.md`, `ai_context.md`, `roadmap.md`, `architecture.md`, `integrations.md`, `api.md`, `discovery.md`, корневой `README.md`, `backend/README.md`, `.gitignore`, `backend/run-local.cmd.example`.
+
+**Next:**
+
+1. Получить сервисные учётные данные для Jira/GitLab.
+2. Перейти к Phase 4 (Activity Feed + Risks).
+3. После стабилизации включить production scheduler.
+
+---
+
+## 2026-07-20 — Первый реальный sync GitLab (production-like данные)
+
+**Stage:** Операционная валидация (код не менялся). Не roadmap-фаза — проверка live-пути после Phase 3.1–3.9.
+
+**Summary:** Первая успешная синхронизация с корпоративным GitLab (`https://git.eltc.ru`) через личный Personal Access Token (`read_api`). Полный поток подтверждён:
+
+`GitLab API → GitLabSyncService → PostgreSQL → activity_events → Timeline API`
+
+Конфиг прогона: профиль `jira-mock` (Jira пока demo), `gitlab.mode=rest` + `GITLAB_TOKEN`, manual `POST /api/admin/sync/gitlab`, scheduler выключен. Для `curl` к внутреннему GitLab нужен обход корпоративного прокси (`--noproxy` / `NO_PROXY=git.eltc.ru,…`) — иначе schannel TLS fail через `proxy2.eltc.ru`.
+
+**Results** (повторный sync после первичного ingest, `mocked=false`, `errors=[]`):
+
+| Метрика | Значение |
+|---|---|
+| projectsSynced | 3 (760 / 2159 / 3494) |
+| branchesFetched | 376 |
+| commitsFetched | 477 |
+| mergeRequestsFetched | 4782 |
+| pages | 118 |
+| Timeline sample | `GET /api/issues/MPTPSUPP-43006/timeline` — реальные `BRANCH_CREATED` / `COMMIT` / `MR_MERGED` (backend + frontend) |
+
+**Validated:**
+
+- аутентификация GitLab REST (`PRIVATE-TOKEN`)
+- пагинация branches / commits / MRs
+- извлечение `issue_key` из branch / commit / MR
+- upsert git-сущностей + `activity_events` в PostgreSQL
+- Timeline API на реальных issue keys
+- in-process sync guard (`Sync already in progress` при параллельном POST)
+
+**Not done / out of this run:** *(на момент записи; Jira closed same day — см. запись «Live e2e» выше)*
+
+- сервисный аккаунт / Group Access Token (личный PAT — только для доказательства работоспособности)
+- реальная Jira (`JIRA_TOKEN` + снятие `jira-mock`) — **сделано позже в тот же день**
+- UI / Dashboard
+- включение `gitlab.sync.enabled` в production-like режиме
+
+**Docs touched:** `session_log.md`, `changelog.md`.
+
+**Next:** *(исторически)* live Jira → см. «Live e2e» выше.
+
+---
+
+## 2026-07-20 — Phase 3.9 GitLab reconcile scheduler implemented
+
+**Stage:** Phase 3.9 «Reconcile scheduler» ([roadmap.md](./roadmap.md) task 3.9) — **реализован**. Код в `sync.gitlab.GitLabSyncScheduler`. Новый ADR **не** создавался (архитектурных изменений нет — зеркало Phase 2.5).
+
+**Summary:**
+
+1. **`GitLabSyncScheduler`** — `SchedulingConfigurer` + `addFixedDelayTask` (**не** `fixedRate`, **не** `@Scheduled`); условная регистрация по `gitlab.sync.enabled` (default `false`); интервал `gitlab.sync.interval` (default `10m`) ← `GITLAB_SYNC_ENABLED` / `GITLAB_SYNC_INTERVAL`. Вызывает только `GitLabSyncService.syncAll()`; логирует результат; ловит exception одного запуска (не ломает следующие).
+2. **In-process guard** — `AtomicBoolean syncInProgress` в `GitLabSyncService.syncAll()`; общий для manual `POST /api/admin/sync/gitlab` и scheduler. Skip → существующий `GitLabSyncResult` с сообщением в `errors()`; без HTTP `409`, без смены контракта.
+3. **Тесты:** `GitLabSyncSchedulerTest` (4) — disabled/enabled/fixedDelay/swallow exception; `GitLabSyncServiceTest` (+1 concurrency guard).
+
+**Decisions / отклонения:**
+
+- Отклонений от design checkpoint Phase 3.9 **нет**.
+- Не добавлялись: webhooks, incremental, retry, `sync_state`, distributed lock, HTTP 409, новые endpoints, новый ADR.
+
+**Docs touched:** `ai_context.md` (v2.15), `roadmap.md` (v2.11), `architecture.md` (v2.13), `session_log.md`, `changelog.md`, `backend/README.md`.
+
+**Code touched:** `GitLabSyncScheduler`, `GitLabSyncProperties`, `GitLabSyncService`, `package-info`, `application.yml`, `DeliveryMonitorApplication` javadoc, `GitLabSyncSchedulerTest`, `GitLabSyncServiceTest`, `GitLabSyncPropertiesTest`.
+
+**Next:** go-ahead → Phase **4** (Activity Feed + Risks).
+
+---
+
 ## 2026-07-17 — Docs tidy + commit: Phase 3.8 + 3.9 design checkpoint
 
 **Stage:** docs tidy перед Phase 3.9. Цель — выровнять SoT под фактический код/статус, затем commit/push.

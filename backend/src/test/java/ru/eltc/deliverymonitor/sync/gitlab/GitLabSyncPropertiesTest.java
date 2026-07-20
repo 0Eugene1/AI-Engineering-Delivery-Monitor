@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -25,6 +27,8 @@ class GitLabSyncPropertiesTest {
                     GitLabSyncProperties properties = context.getBean(GitLabSyncProperties.class);
                     assertThat(properties.getPageSize()).isEqualTo(50);
                     assertThat(properties.getCommitHistoryDays()).isEqualTo(30);
+                    assertThat(properties.isEnabled()).isFalse();
+                    assertThat(properties.getInterval()).isEqualTo(Duration.ofMinutes(10));
                     assertThat(properties.getRepositories()).hasSize(1);
                     GitLabSyncProperties.Repository repo = properties.getRepositories().get(0);
                     assertThat(repo.getGitlabId()).isEqualTo(2159L);

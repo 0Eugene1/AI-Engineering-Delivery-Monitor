@@ -31,8 +31,11 @@ class AdminTokenPropertiesTest {
     @Test
     void failsToStartWhenTokenIsBlank() {
         // Default delivery-monitor.admin.token is "" (no secrets committed) — must fail @NotBlank,
-        // the same fail-fast policy as JIRA_TOKEN.
-        contextRunner.run(context -> assertThat(context).hasFailed());
+        // the same fail-fast policy as JIRA_TOKEN. Force an empty property so an ambient
+        // DELIVERY_MONITOR_ADMIN_TOKEN on the developer machine cannot mask the blank case.
+        contextRunner
+                .withPropertyValues("delivery-monitor.admin.token=")
+                .run(context -> assertThat(context).hasFailed());
     }
 
     @Test

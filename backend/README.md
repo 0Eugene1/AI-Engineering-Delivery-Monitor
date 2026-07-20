@@ -1,6 +1,6 @@
 # Backend
 
-Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.8** (GitLab client → sync → config/git entities → activity_events → workstreams → Read API → Admin sync HTTP) done. **Milestone:** mock e2e Jira+GitLab → Timeline. **Next:** Phase **3.9** reconcile scheduler (design approved). Not yet: Jenkins, frontend.
+Spring Boot modular monolith. **Status:** Phase 1 Skeleton + Phase 2.1–2.5 (Jira full path) + Phase **3.1–3.9** (GitLab client → sync → config/git entities → activity_events → workstreams → Read API → Admin sync HTTP → reconcile scheduler) done. **Milestone:** mock e2e + **Live E2E 2026-07-20** (rest+rest, personal PATs). **Next:** Phase **4** (Activity Feed + Risks). Not yet: Jenkins, frontend.
 
 ## Stack
 
@@ -34,6 +34,16 @@ cd backend
 
 Configure `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT` via environment variables or `-D` system properties (see `src/main/resources/application.yml` for defaults).
 
+## Live run (personal PAT, Windows cmd)
+
+1. Copy `run-local.cmd.example` → `run-local.cmd` (gitignored — never commit).
+2. Fill `JIRA_TOKEN` / `GITLAB_TOKEN` / `DELIVERY_MONITOR_ADMIN_TOKEN`.
+3. Keep `JIRA_RESPONSE_TIMEOUT=60s` and `NO_PROXY=git.eltc.ru,jira.eltc.ru,localhost,127.0.0.1` (corporate proxy breaks TLS to internal hosts).
+4. Run `run-local.cmd` (no `jira-mock` / `gitlab-mock` profiles).
+5. Manual sync: `POST /api/admin/sync/jira` then `POST /api/admin/sync/gitlab` with Bearer admin token.
+
+Live E2E 2026-07-20 snapshot: ~3506 issues; 3 GitLab repos; sample `GET /api/issues/MPTPSUPP-43006` + `…/timeline`. Service accounts still TODO.
+
 ## Tests
 
 ```powershell
@@ -41,7 +51,7 @@ cd backend
 .\mvnw.cmd clean verify
 ```
 
-The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **194** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
+The context test uses an embedded H2 database in PostgreSQL-compatibility mode, so it runs without Docker and still exercises the Liquibase wiring. Current baseline: **199** tests, 0 failures, 2 skipped (`JiraSmokeTest` without token).
 
 ## Smoke checklist (после крупного этапа)
 
@@ -195,7 +205,7 @@ header matching `DELIVERY_MONITOR_ADMIN_TOKEN`; `/actuator/health` stays public.
 |---|---|---|
 | `DELIVERY_MONITOR_ADMIN_TOKEN` | *(empty)* | Bearer token gating `/api/admin/**`; a **separate** secret from `JIRA_TOKEN` / `GITLAB_TOKEN`, fail-fast if unset |
 
-## GitLab (Phase 3.1–3.8)
+## GitLab (Phase 3.1–3.9)
 
 | Env var | Default | Purpose |
 |---|---|---|
@@ -204,9 +214,13 @@ header matching `DELIVERY_MONITOR_ADMIN_TOKEN`; `/actuator/health` stays public.
 | `GITLAB_MODE` | `rest` | `rest` or `mock` (offline fixtures) |
 | `GITLAB_SYNC_PAGE_SIZE` | `50` | Pagination for branches/commits/MRs |
 | `GITLAB_SYNC_COMMIT_HISTORY_DAYS` | `30` | Commit fetch window (`since`) |
+| `GITLAB_SYNC_ENABLED` | `false` | Enable background GitLab reconcile scheduler |
+| `GITLAB_SYNC_INTERVAL` | `10m` | Fixed-delay between scheduled sync runs |
 
 - **3.1** `integration.gitlab` — `GitLabClient` / `RestGitLabClient` / `MockGitLabClient`.
 - **3.2–3.6** `sync.gitlab.GitLabSyncService` — sync observed repos from PostgreSQL (`RepositoryPersistencePort`); upserts branches/commits/MRs; stamps `issue_key`; writes `activity_events`; upserts workstreams. Yaml `gitlab.sync.repositories` — mock/local/tests only.
+- **3.8** `POST /api/admin/sync/gitlab` — manual trigger → `syncAll()`.
+- **3.9** `GitLabSyncScheduler` (`SchedulingConfigurer`, `fixedDelay`) — same `syncAll()`; gated by `gitlab.sync.enabled`. In-process `AtomicBoolean` guard in `GitLabSyncService` (shared with manual path).
 - Liquibase: `0003-workstream-types`, `0004-repositories`, `0005-git-entities`, `0006-activity-events`, `0007-workstreams`.
 
 Offline GitLab:
@@ -215,8 +229,6 @@ Offline GitLab:
 cd backend
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=gitlab-mock"
 ```
-
-**Not yet:** GitLab scheduler (3.9).
 
 ## Read API (issues + timeline + workstream types)
 
@@ -232,8 +244,7 @@ Current: `0001` baseline → `0002` issues → `0003` workstream_types → `0004
 
 ## Next task
 
-Phase **3.1–3.8** done. Stop here until explicitly told to continue.
+Phase **3.1–3.9** done (GitLab + Timeline + reconcile scheduler). Stop here until explicitly told to continue.
 
-Дальше по порядку (не начинать без явного go-ahead): Phase **3.9** —
-GitLab reconcile scheduler (`sync.gitlab`, fixedDelay; webhooks optional later).
-См. [roadmap.md](../docs/roadmap.md).
+Дальше по порядку (не начинать без явного go-ahead): Phase **4** —
+Activity Feed + Risks. См. [roadmap.md](../docs/roadmap.md).

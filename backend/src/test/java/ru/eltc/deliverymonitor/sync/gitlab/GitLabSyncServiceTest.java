@@ -42,6 +42,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -519,6 +521,66 @@ class GitLabSyncServiceTest {
         assertThat(result.updated()).isEqualTo(5);
         assertThat(result.saved()).isEqualTo(6);
         assertThat(ports.workstreamBatches).isEmpty();
+    }
+
+    @Test
+    void guardSkipsAConcurrentSyncAllCallWhileAnotherRunIsInProgress() throws InterruptedException {
+        CountDownLatch firstRunEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstRun = new CountDownLatch(1);
+        FakeGitLabClient blockingClient = new FakeGitLabClient(
+                project(2159L, "mptp8", "mptp/mptp8"),
+                List.of(branch("master", commit("aaa", "2026-07-10T10:00:00Z"))),
+                List.of(commit("aaa", "2026-07-10T10:00:00Z")),
+                List.of()) {
+            @Override
+            public Mono<GitLabProjectDto> getProject(String projectIdOrPath) {
+                firstRunEntered.countDown();
+                try {
+                    releaseFirstRun.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return super.getProject(projectIdOrPath);
+            }
+        };
+
+        RecordingPorts ports = RecordingPorts.createAll();
+        GitLabSyncService service = newService(
+                blockingClient,
+                properties(50, 30),
+                GitLabProperties.Mode.REST,
+                FakeRepositoryPort.of(entity(10L, 2159L, "mptp/mptp8", "mptp8", "backend")),
+                ports);
+
+        GitLabSyncResult[] firstRunResult = new GitLabSyncResult[1];
+        Thread firstRun = new Thread(() -> firstRunResult[0] = service.syncAll());
+        firstRun.start();
+
+        assertThat(firstRunEntered.await(5, TimeUnit.SECONDS))
+                .as("test setup: first run did not reach the client in time")
+                .isTrue();
+
+        // Second call arrives while the first run is still blocked inside the client above —
+        // the in-process guard must skip it immediately rather than run concurrently.
+        GitLabSyncResult secondRunResult = service.syncAll();
+        assertThat(secondRunResult.fetched()).isZero();
+        assertThat(secondRunResult.projectsSynced()).isZero();
+        assertThat(secondRunResult.pages()).isZero();
+        assertThat(secondRunResult.errors())
+                .containsExactly("Sync already in progress; this run was skipped");
+        assertThat(ports.branchBatches).isEmpty();
+
+        releaseFirstRun.countDown();
+        firstRun.join(5_000);
+        assertThat(firstRun.isAlive()).isFalse();
+        assertThat(firstRunResult[0].errors()).isEmpty();
+        assertThat(firstRunResult[0].projectsSynced()).isEqualTo(1);
+        assertThat(ports.branchBatches).hasSize(1);
+
+        // The guard is released after a run completes: a third call now runs normally.
+        GitLabSyncResult thirdRunResult = service.syncAll();
+        assertThat(thirdRunResult.errors()).isEmpty();
+        assertThat(thirdRunResult.projectsSynced()).isEqualTo(1);
     }
 
     // --- helpers ---

@@ -1,0 +1,20 @@
+@echo off
+REM Copy to run-local.cmd and fill in secrets. run-local.cmd is gitignored — never commit it.
+REM Usage: double-click or:  cd backend && run-local.cmd
+
+cd /d "%~dp0"
+
+set "JIRA_TOKEN=PASTE_JIRA_TOKEN_HERE"
+set "JIRA_AUTH_TYPE=bearer"
+set "JIRA_RESPONSE_TIMEOUT=60s"
+
+set "GITLAB_TOKEN=PASTE_GITLAB_TOKEN_HERE"
+
+set "DELIVERY_MONITOR_ADMIN_TOKEN=local-demo-admin"
+
+REM Bypass corporate proxy for internal hosts (curl/Java tooling that honors NO_PROXY)
+set "NO_PROXY=git.eltc.ru,jira.eltc.ru,localhost,127.0.0.1"
+set "no_proxy=%NO_PROXY%"
+
+REM No jira-mock / gitlab-mock — live APIs
+.\mvnw.cmd spring-boot:run

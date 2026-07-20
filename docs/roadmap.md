@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.10 |
+| **Version** | 2.12 |
 | **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md), [discovery.md](./discovery.md) |
 
 ## Guiding rule
@@ -16,7 +16,7 @@
 
 ---
 
-## Фактический статус фаз (по коду, на 2026-07-17)
+## Фактический статус фаз (по коду, на 2026-07-20)
 
 > Таблицы плана ниже — исходная разбивка. Ниже — что **реально реализовано** в коде (см. [ai_context.md](./ai_context.md) §2, [session_log.md](./session_log.md)).
 
@@ -38,8 +38,8 @@
 | Phase 3.5 Linking + `activity_events` (`IssueKeyExtractor`, timeline writer) | **Done** |
 | Phase 3.6 Workstreams (`domain.workstream`, Git-driven upsert) | **Done** |
 | Phase 3.7 Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`) | **Done** |
-| Phase 3.8 Admin sync HTTP (`POST /api/admin/sync/gitlab`) | **Done** — mock e2e до Timeline подтверждён |
-| Phase 3.9 Reconcile scheduler | **Next** (design approved) |
+| Phase 3.8 Admin sync HTTP (`POST /api/admin/sync/gitlab`) | **Done** — mock e2e + **Live E2E 2026-07-20** (rest+rest) |
+| Phase 3.9 Reconcile scheduler | **Done** |
 | Phase 4+ (Activity Feed / Risks / Jenkins / Release Health / AI Summary) | Не начаты |
 
 **Замечание по нумерации:** в плановых таблицах ниже endpoint `POST /api/admin/sync/jira` отнесён к Phase 2.2, а «REST API» (read) — к Phase 2.4. Фактически admin-sync endpoint был выделен в **отдельный** шаг и во всей остальной документации помечен как **Phase 2.4**; read API и scheduler, соответственно, сдвинулись на Phase 2.5+.
@@ -76,20 +76,20 @@ Phase 2.4 REST API         ← GET /api/issues
        ↓
 Phase 2.5 Scheduler        ← polling (после того как ручной sync стабилен) — Done
        ↓
-Phase 3 GitLab + Timeline  ← 3.1–3.8 Done; next 3.9 reconcile scheduler
+Phase 3 GitLab + Timeline  ← 3.1–3.9 Done
 ```
 
 ---
 
-## Phase 3 — GitLab + Timeline (3.1–3.8 Done; next 3.9)
+## Phase 3 — GitLab + Timeline (3.1–3.9 Done)
 
-> **Статус (2026-07-17):** tasks **3.1–3.8 реализованы** в коде (194 теста). **Milestone:** mock e2e `sync/jira` → `sync/gitlab` → `GET …/timeline` с событиями. Next — **3.9** reconcile scheduler. Timeline read: sort `occurred_at DESC`, empty/unknown key → `200` + `events: []`.  
+> **Статус (2026-07-20):** tasks **3.1–3.9 реализованы** в коде. **Milestone:** mock path + **Live E2E 2026-07-20** (`jira.mode=rest` + `gitlab.mode=rest`, personal PATs; ~3506 issues / ~5640 activity_events); reconcile scheduler. Next — Phase **4**. Timeline read: sort `occurred_at DESC`, empty/unknown key → `200` + `events: []`.  
 > Полный дизайн: [architecture.md](./architecture.md) § Phase 3, [database.md](./database.md) § Phase 3, [api.md](./api.md) § Phase 3, [integrations.md](./integrations.md).  
 > Seed репозиториев: [discovery.md](./discovery.md) §9.2 (`mptp-react-native`→frontend, `mptp8`→backend, `eltcbackend`→oracle).
 
 **Правило Phase 3 (как у Jira):** сначала **ручной** `POST /api/admin/sync/gitlab` (task **3.8** — **Done**), потом reconcile-scheduler / webhooks. Не начинать с webhooks.
 
-**Первая ценность (достигнута на mock):** Issue Timeline заполняется событиями GitLab (ветки / commits / MR) без ручного ввода — данные пишутся в `activity_events` (3.5), читаются через Read API (3.7), запускаются manual admin sync (3.8).
+**Первая ценность (mock + Live E2E 2026-07-20):** Issue Timeline заполняется событиями GitLab (ветки / commits / MR) без ручного ввода — данные пишутся в `activity_events` (3.5), читаются через Read API (3.7), запускаются manual admin sync (3.8). Live proof — личные PAT; service accounts остаются TODO.
 
 | Task | Scope | **Не делать** на этом шаге | Done when | Status |
 |---|---|---|---|---|
@@ -101,7 +101,7 @@ Phase 3 GitLab + Timeline  ← 3.1–3.8 Done; next 3.9 reconcile scheduler
 | **3.6 Workstreams** | `domain.workstream`: upsert `Workstream = Issue × Type` при первой Git-активности; derived status (минимум) | Release Health %, auto shell-`qa`, People | Workstreams в БД для linked issues | **Done** |
 | **3.7 Read API** | `GET /api/issues/{key}/timeline`, `GET /api/workstream-types`; опц. workstreams в `GET /api/issues/{key}` | Activity Feed, Board, Release Health, pagination | curl → JSON Timeline из PostgreSQL | **Done** |
 | **3.8 Admin sync HTTP** | `POST /api/admin/sync/gitlab` + тот же Bearer admin-token | Новый auth, OIDC | Manual sync end-to-end | **Done** |
-| **3.9 Reconcile scheduler** *(после 3.8)* | `sync.gitlab.GitLabSyncScheduler` → только `GitLabSyncService.syncAll()`; `SchedulingConfigurer` + `fixedDelay`; `gitlab.sync.enabled`/`interval` (default `false`/`10m`); in-process guard в `GitLabSyncService` | `api.admin`, `GitLabClient` напрямую, Controller, Kafka/Redis, distributed lock, incremental, retry, webhooks, Phase 5 pipelines | Фоновый reconcile без ручного POST | **Next** (design approved) |
+| **3.9 Reconcile scheduler** *(после 3.8)* | `sync.gitlab.GitLabSyncScheduler` → только `GitLabSyncService.syncAll()`; `SchedulingConfigurer` + `fixedDelay`; `gitlab.sync.enabled`/`interval` (default `false`/`10m`); in-process guard в `GitLabSyncService` | `api.admin`, `GitLabClient` напрямую, Controller, Kafka/Redis, distributed lock, incremental, retry, webhooks, Phase 5 pipelines | Фоновый reconcile без ручного POST | **Done** |
 
 ### Phase 3 out of scope (явно)
 
@@ -219,3 +219,7 @@ Out of MVP:
 **v2.10 (2026-07-17):** Phase **3.8 Done** — `POST /api/admin/sync/gitlab` (194 теста). Mock e2e milestone: Jira sync → GitLab sync → Issue Timeline. Next — **3.9** reconcile scheduler.
 
 **v2.10a (2026-07-17):** Phase **3.9 design checkpoint** (docs-only): `GitLabSyncScheduler` в `sync.gitlab` → только `syncAll()`; guard в `GitLabSyncService`; `gitlab.sync.enabled=false` / `interval=10m`. Код не писался. См. [decisions.md](./decisions.md).
+
+**v2.11 (2026-07-20):** Phase **3.9 Done** — `sync.gitlab.GitLabSyncScheduler` (`SchedulingConfigurer`, `fixedDelay`, `gitlab.sync.enabled`/`interval`); in-process guard в `GitLabSyncService`. Next — Phase **4**.
+
+**v2.12 (2026-07-20):** **Live E2E** validated — rest+rest на личных PAT (~3506 Jira issues; 3 GitLab repos; sample `MPTPSUPP-43006`). Service accounts всё ещё TODO. Tests baseline **199**. Next — Phase **4**.

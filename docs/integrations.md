@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.3 |
+| **Version** | 2.4 |
 | **Related** | [architecture.md](./architecture.md), [database.md](./database.md), [glossary.md](./glossary.md) |
 
 ## Principles
@@ -38,7 +38,7 @@ feature\/(?<key>[A-Z]+-\d+)
 |---|---|
 | URL | `https://jira.eltc.ru` |
 | Mode | **Primary: polling** каждые 2–5 мин |
-| Auth | Service account / PAT |
+| Auth | **Validated 2026-07-20:** personal PAT (`JIRA_AUTH_TYPE=bearer`). Service account — TODO |
 | Optional | Webhook `issue_updated` → сразу INSERT (если админы разрешат) |
 
 ### What we sync
@@ -61,8 +61,8 @@ sprint in openSprints() AND project = MPTPSUPP
 
 | | |
 |---|---|
-| Mode | **Phase 3.8 Done:** manual poll `POST /api/admin/sync/gitlab`. **Phase 3.9 next** (design approved): reconcile scheduler. **Webhook preferred** after scheduled path stable (ADR-004) |
-| Auth | Project/Group token (`PRIVATE-TOKEN`), env `GITLAB_TOKEN` |
+| Mode | **Phase 3.8–3.9 Done:** manual poll `POST /api/admin/sync/gitlab` + reconcile scheduler (`gitlab.sync.enabled`/`interval`). **Webhook preferred** after scheduled path stable (ADR-004) |
+| Auth | Project/Group token (`PRIVATE-TOKEN`), env `GITLAB_TOKEN`. **Live E2E 2026-07-20:** personal PAT (`read_api`). Group/service token — TODO |
 | Mapping | `gitlab project → workstream_type_code` via table `repositories` |
 | Base URL | `https://git.eltc.ru` ([discovery.md](./discovery.md) §9.2) |
 

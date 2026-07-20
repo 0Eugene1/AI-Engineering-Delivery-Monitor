@@ -46,9 +46,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Application-level GitLab sync (docs/roadmap.md Phase 3.2 + 3.4.1 + 3.5 + 3.6).
+ * Application-level GitLab sync (docs/roadmap.md Phase 3.2 + 3.4.1 + 3.5 + 3.6 + 3.9).
  *
  * <p>Observed-repository list (Single SoT — docs/decisions.md):
  * <ul>
@@ -68,8 +69,17 @@ import java.util.Optional;
  * Orphans (no key) are still persisted with {@code issue_key = null} and do <b>not</b> create
  * workstreams.
  *
- * <p><b>Out of scope:</b> dashboard, IssueEntity lookup, scheduler (Phase 3.9), pipelines,
- * Jenkins. Admin HTTP entry is {@code api.admin.GitLabSyncController} (Phase 3.8).
+ * <p><b>In-process concurrency guard (Phase 3.9):</b> this is the single place both the manual
+ * {@code POST /api/admin/sync/gitlab} trigger and {@link GitLabSyncScheduler} call into, so a
+ * simple in-memory {@link AtomicBoolean} flag here is enough to stop the two from ever running at
+ * the same time — no distributed lock, no {@code sync_state} row, no new HTTP status code. If a
+ * call arrives while a run is already in progress, it is skipped immediately and reported through
+ * the existing {@link GitLabSyncResult#errors()} field (the response shape/API contract does not
+ * change); the in-progress run is unaffected and keeps going.
+ *
+ * <p><b>Out of scope:</b> dashboard, IssueEntity lookup, pipelines, Jenkins. Admin HTTP entry is
+ * {@code api.admin.GitLabSyncController} (Phase 3.8); background entry is
+ * {@link GitLabSyncScheduler} (Phase 3.9).
  */
 @Service
 @EnableConfigurationProperties(GitLabSyncProperties.class)
@@ -93,6 +103,9 @@ public class GitLabSyncService {
     private final IssueKeyExtractor issueKeyExtractor;
     private final ObjectMapper objectMapper;
     private final Duration blockTimeout;
+
+    /** Guards against a manual and a scheduled sync running at the same time (see class Javadoc). */
+    private final AtomicBoolean syncInProgress = new AtomicBoolean(false);
 
     public GitLabSyncService(
             GitLabClient gitLabClient,
@@ -122,12 +135,38 @@ public class GitLabSyncService {
                 .plusSeconds(5);
     }
 
-    /** Syncs every observed repository (source depends on {@code gitlab.mode}). */
+    /**
+     * Syncs every observed repository (source depends on {@code gitlab.mode}).
+     *
+     * <p>If another run (manual or scheduled) is already in progress, this call is skipped
+     * immediately instead of running concurrently — see the in-process guard note in the class
+     * Javadoc.
+     */
     public GitLabSyncResult syncAll() {
-        Instant startedAt = Instant.now();
-        List<String> resolveErrors = new ArrayList<>();
-        List<SyncTarget> targets = resolveSyncTargets(resolveErrors);
-        return runSync(startedAt, targets, resolveErrors);
+        if (!syncInProgress.compareAndSet(false, true)) {
+            Instant now = Instant.now();
+            log.info("GitLab sync already in progress; skipping this run");
+            return new GitLabSyncResult(
+                    now,
+                    now,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    gitLabProperties.getMode() == GitLabProperties.Mode.MOCK,
+                    0,
+                    0,
+                    List.of("Sync already in progress; this run was skipped"));
+        }
+        try {
+            Instant startedAt = Instant.now();
+            List<String> resolveErrors = new ArrayList<>();
+            List<SyncTarget> targets = resolveSyncTargets(resolveErrors);
+            return runSync(startedAt, targets, resolveErrors);
+        } finally {
+            syncInProgress.set(false);
+        }
     }
 
     /**
