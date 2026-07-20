@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Draft (MVP contract) |
-| **Version** | 2.9 |
+| **Version** | 2.14 |
 | **Style** | REST, JSON |
 | **Related** | [architecture.md](./architecture.md), [ux.md](./ux.md), [database.md](./database.md), [security.md](./security.md), [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md) |
 
@@ -114,7 +114,138 @@ Response — отдельный DTO `IssueResponse` (не JPA entity):
 }
 ```
 
-**Не в Phase 3:** `GET /api/activity` (Feed — Phase 4), `GET /api/releases/.../health`, `GET /api/risks`, `POST /hooks/gitlab` можно отложить до после manual sync (ADR-004 preferred webhook — но **после** 3.8, который Done), pipelines API.
+**Не в Phase 3:** `GET /api/releases/.../health`, `POST /hooks/gitlab` можно отложить до после manual sync (ADR-004 preferred webhook — но **после** 3.8, который Done), pipelines API. Activity Feed / Risks — **Phase 4** (ниже).
+
+### Phase 4 — Activity Feed + Risks + Dashboard UI (4.1–4.3 implemented)
+
+> Design: [architecture.md](./architecture.md) § Phase 4, [ux.md](./ux.md), [decisions.md](./decisions.md). Без AI / Kafka / Redis / CQRS / Jenkins / Release Health. Без live Jira/GitLab.
+
+#### `GET /api/activity` — Activity Feed (task 4.1 — **implemented**)
+
+```
+GET /api/activity?since={iso}&limit={n}&workstreamType={code}&orphans={true|false}
+```
+
+Реализация: `api.activity.ActivityController` → `ActivityQueryService` →
+`ActivityEventRepository.findFeed` → shared `api.ActivityEventMapper` (тот же summary/actor/payload,
+что Timeline). Конфиг: `activity.feed.default-limit` / `activity.feed.max-limit`.
+
+| Параметр | Default | Meaning |
+|---|---|---|
+| `since` | (none) | `occurred_at >= since` (ISO-8601 UTC); без параметра — без нижней границы |
+| `limit` | `50` (`activity.feed.default-limit`) | Макс. число событий; потолок `activity.feed.max-limit` (`200`) |
+| `workstreamType` | (none) | Фильтр по `workstream_type_code` |
+| `orphans` | **`true`** | `true` — включать события с `issue_key` null; `false` — только linked |
+
+- Источник: только PostgreSQL `activity_events` — **без новой таблицы**.
+- Сортировка: `ORDER BY occurred_at DESC`.
+- Пустой результат → `200` + `{ "events": [] }` (не `404`).
+- Пакет: `api.activity` → `domain.timeline`. **Без** `domain.activity`.
+- Auth: как остальные read (`permitAll` внутри VPN).
+- Index: Liquibase `0008` `(workstream_type_code, occurred_at)`.
+
+Response:
+
+```json
+{
+  "events": [
+    {
+      "id": "42",
+      "occurredAt": "2026-07-20T10:12:00Z",
+      "type": "MR_MERGED",
+      "source": "GITLAB",
+      "issueKey": "MPTPSUPP-43006",
+      "workstreamType": { "code": "backend", "displayName": "Backend" },
+      "actor": { "id": "j.doe", "name": "John Doe" },
+      "summary": "merged MR !88",
+      "payload": { "iid": 88 }
+    }
+  ]
+}
+```
+
+Отличие от Timeline item: поля `issueKey` (nullable для orphan) и `source` на каждом событии. `summary` — derived at read (как в Timeline, через shared mapper).
+
+#### `GET /api/risks` — Risks (task 4.2 — **implemented**)
+
+```
+GET /api/risks?severity={LOW|MEDIUM|HIGH}&code={CODE}&issueKey={key}&limit={n}
+```
+
+Реализация: `api.risk.RiskController` → `RiskQueryService` → `domain.risk.RiskService`
+(evaluate-on-read). Конфиг: `risk.stale-activity-days` / `risk.open-mr-stale-days` /
+`risk.default-limit` / `risk.max-limit`.
+
+| Параметр | Default | Meaning |
+|---|---|---|
+| `severity` | (none) | Фильтр по severity |
+| `code` | (none) | Фильтр по коду правила (`STALE_ACTIVITY`, …) |
+| `issueKey` | (none) | Риски одной issue |
+| `limit` | `100` (`risk.default-limit`) | Потолок списка; clamp `risk.max-limit` (`200`) |
+
+**Не** используется `sprintId` — таблицы `sprints` нет ([database.md](./database.md)).
+
+- Вычисление: **evaluate-on-read** — **без** `risk_flags` / JPA risk entity.
+- **Scope:** workstream-правила итерируют **`workstreams`** (не полный каталог issues).
+- Пороги (locked): `STALE_ACTIVITY` = **3 days** (`risk.stale-activity-days`), `OPEN_MR_STALE` = **5 days** (`risk.open-mr-stale-days`).
+- Правила: `STALE_ACTIVITY`, `OPEN_MR_STALE`, `NO_MR` (workstream без MR), `JIRA_ACTIVE_NO_GIT` (active Jira `status_category` name = `In Progress` без Git).
+- Empty → `200` + `{ "risks": [] }`.
+- Пакет: `api.risk` → `domain.risk`.
+- Auth: как остальные read (`permitAll` внутри VPN).
+
+Response:
+
+```json
+{
+  "risks": [
+    {
+      "code": "OPEN_MR_STALE",
+      "severity": "MEDIUM",
+      "issueKey": "MPTPSUPP-43006",
+      "workstreamType": { "code": "backend", "displayName": "Backend" },
+      "explanation": "MR !88 opened for 7 days without merge",
+      "detectedAt": "2026-07-20T12:00:00Z",
+      "evidence": {
+        "mergeRequestIid": 88,
+        "openedAt": "2026-07-13T09:00:00Z"
+      }
+    }
+  ]
+}
+```
+
+Коды Phase 4: `STALE_ACTIVITY`, `OPEN_MR_STALE`, `NO_MR`, `JIRA_ACTIVE_NO_GIT`. Severity enum: `LOW` | `MEDIUM` | `HIGH`.
+
+#### `GET /api/workstreams/progress` — Projects bars (task 4.3 — **implemented**)
+
+```
+GET /api/workstreams/progress
+```
+
+Агрегат для Dashboard «Projects»: доля `merged` workstreams по каждому **active** Workstream Type.
+
+Реализация: `api.workstream.WorkstreamProgressController` → `WorkstreamProgressQueryService`
+→ `WorkstreamRepository.countTotalsAndMergedByType` + `workstream_types` (active, `sort_order`).
+
+- Formula: `percent = total == 0 ? 0 : round(100 * merged / total)`.
+- Не Release Health (нет `fixVersion`) — глобальный срез по всем workstreams.
+- Empty types still returned with `total=0`, `percent=0`.
+- Auth: read `permitAll`.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "workstreamType": { "code": "backend", "displayName": "Backend" },
+      "total": 40,
+      "merged": 32,
+      "percent": 80
+    }
+  ]
+}
+```
 
 ### Admin sync (Phase 2.4 — implemented, до scheduler)
 
@@ -155,10 +286,10 @@ response DTO (реюз, а не параллельная модель):
 ### Activity feed
 
 ```
-GET /api/activity?since={iso}&limit={n}
+GET /api/activity?since={iso}&limit={n}&workstreamType={code}&orphans={true|false}
 ```
 
-Командная лента (как GitHub).
+Командная лента (как GitHub). **Phase 4.1 реализовано** — контракт выше (§ Phase 4). Источник = `activity_events` (ADR-008), не отдельная таблица.
 
 ### Release health
 
@@ -173,10 +304,11 @@ GET /api/releases/{fixVersion}/health
 ### Risks
 
 ```
-GET /api/risks?sprintId={id}
+GET /api/risks?severity={…}&code={…}&issueKey={…}&limit={n}
 ```
 
-Список открытых `risk_flags` (также можно встраивать в board response).
+Список вычисленных рисков (evaluate-on-read). **Phase 4.2 реализовано** — контракт выше (§ Phase 4).  
+`?sprintId=` из раннего эскиза **снят** (нет `sprints` persistence). Persistence `risk_flags` — не в Phase 4.
 
 ### Webhooks (ingest)
 

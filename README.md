@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| **Status** | Phase 3.1–3.9 done; Live E2E 2026-07-20; next Phase **4** (Activity Feed + Risks) |
-| **Done** | 2.1–2.5 Jira · 3.1–3.9 GitLab path through Timeline + reconcile scheduler (mock e2e + Live E2E rest+rest, personal PATs) |
+| **Status** | Phase **4.1–4.3 Done**; Live E2E 2026-07-20; next Phase **5** или Pilot |
+| **Done** | 2.1–2.5 Jira · 3.1–3.9 GitLab · 4.1 Feed · 4.2 Risks · 4.3 minimal React UI |
 | **Team** | 9 people: 7 developers + 2 QA |
 | **Concept version** | 2.10 |
-| **App code** | Backend: Jira full path + GitLab path through workstreams + Timeline/workstream-types REST + `POST /api/admin/sync/gitlab` + GitLab reconcile scheduler (3.9); Liquibase `0003`–`0007`. Not yet: frontend, Jenkins, Phase 4 |
+| **App code** | Backend read APIs + sync path; `frontend/` Vite React (Дашборд / Лента / История задачи, UI на русском). Not yet: Sprint Board, Jenkins, Release Health |
 
 ---
 
@@ -64,11 +64,11 @@ Monitor — read-only проекция поверх существующих и�
 
 ## Roadmap (short)
 
-0. Discovery → 1. Skeleton → **2.1–2.5 Jira** (Client → Sync → DB → API → Scheduler) → **3. GitLab + Timeline** (3.1–3.9 done) → 4. Feed + Risks → 5. CI + Release Health → 6. Pilot → 7. AI Summary  
+0. Discovery → 1. Skeleton → **2.1–2.5 Jira** → **3. GitLab + Timeline** → **4. Feed + Risks + Dashboard UI** → 5. CI + Release Health → 6. Pilot → 7. AI Summary  
 
 Детали: [docs/roadmap.md](./docs/roadmap.md).
 
-**Сейчас:** Phase 2.1–2.5 и Phase 3.1–3.9 завершены. **Milestone:** mock e2e + **Live E2E 2026-07-20** (`jira.mode=rest` + `gitlab.mode=rest`, personal PATs) — `POST …/sync/jira` → `POST …/sync/gitlab` → `GET …/timeline` + reconcile scheduler. Service accounts — TODO. Следующий шаг — Phase **4** (Activity Feed + Risks).
+**Сейчас:** Phase 2–4.3 завершены. **Milestone:** Live E2E 2026-07-20 + минимальный React dashboard. Следующий шаг — Phase **5** (Jenkins / Release Health) или Pilot.
 
 ---
 

@@ -23,4 +23,11 @@ public interface IssueRepository extends JpaRepository<IssueEntity, Long> {
      * id, upsert matching key) or the database-generated {@link IssueEntity#getId()}.
      */
     Optional<IssueEntity> findByKey(String key);
+
+    /**
+     * Issues in a given Jira status category <em>name</em> (Phase 4.2 {@code JIRA_ACTIVE_NO_GIT}).
+     * Sync persists category {@code name} (e.g. {@code In Progress}), not the Jira key
+     * {@code indeterminate}.
+     */
+    List<IssueEntity> findAllByStatusCategory(String statusCategory);
 }

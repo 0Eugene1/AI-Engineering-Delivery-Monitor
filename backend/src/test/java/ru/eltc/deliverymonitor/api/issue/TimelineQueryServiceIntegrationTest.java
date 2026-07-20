@@ -8,6 +8,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import ru.eltc.deliverymonitor.api.ActivityEventMapper;
 import ru.eltc.deliverymonitor.domain.timeline.ActivityEventTypes;
 import ru.eltc.deliverymonitor.domain.timeline.ActivityEventUpsertCommand;
 import ru.eltc.deliverymonitor.domain.timeline.ActivityEventUpsertService;
@@ -26,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ActivityEventUpsertService.class, TimelineQueryService.class, ObjectMapper.class})
+@Import({ActivityEventUpsertService.class, TimelineQueryService.class, ActivityEventMapper.class,
+        ObjectMapper.class})
 class TimelineQueryServiceIntegrationTest {
 
     @DynamicPropertySource

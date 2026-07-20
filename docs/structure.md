@@ -40,7 +40,7 @@ AI-Engineering-Delivery-Monitor/
 │   ├── changelog.md      # Человеческая история изменений
 │   └── …                 # vision, architecture, api, …
 ├── backend/              # Spring Boot — Jira + GitLab sync, domain.*, api (admin/issue/workstream/security)
-├── frontend/             # React dashboard (not started)
+├── frontend/             # React dashboard (Phase 4.3: Dashboard / Feed / Timeline)
 ├── docker/               # docker-compose, local Postgres
 ├── scripts/              # Вспомогательные скрипты (migrate, seed, sync helpers)
 ├── .github/              # Issue/PR templates; workflows позже
@@ -57,7 +57,7 @@ AI-Engineering-Delivery-Monitor/
 | `docs/` | Единственный SoT по продукту/архитектуре | Уже сейчас |
 | `docs/adr/` | Формальные решения | Уже сейчас |
 | `backend/` | Код Spring Boot monolith | Phase 1 Skeleton+ |
-| `frontend/` | React UI | Phase 1–2+ |
+| `frontend/` | React UI | Phase 4.3+ |
 | `docker/` | Локальный Postgres и т.п. | Skeleton |
 | `scripts/` | One-off / CI helpers | По мере нужды |
 | `.github/` | Contribution hygiene | Уже templates; CI — позже |

@@ -8,7 +8,41 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Frontend UI — русская локализация:** пользовательские тексты Dashboard / Activity Feed / Issue Timeline переведены на русский (`Монитор доставки`, риски, события, empty/error states, даты). Мапперы `labels.ts` + `eventDetail` для backend codes/`summary` без смены API. `npm run build` OK. Backend не менялся.
+
 ### Documentation
+
+- **Docs sync после RU UI:** `ux.md` v2.3 (wireframes + принцип «UI на русском»), `ai_context.md` v2.22, `frontend/README.md`, корневой `README.md`, `session_log.md`, `changelog.md`.
+
+### Added
+
+- **Phase 4.3 Delivery Dashboard (UI)**: минимальный React-слой в `frontend/` (Vite + TypeScript + React Router). Экраны: Dashboard (`/`), Activity Feed (`/activity`), Issue Timeline (`/issues/:key`). Vite proxy `/api` → `:8080`. Тонкий read API `GET /api/workstreams/progress` для Projects bars (`merged/total` по active Workstream Type). **Не** Sprint Board / Release Health / Jenkins / auth UI. Тест: `WorkstreamProgressControllerTest` (+1), smoke в `DeliveryMonitorApplicationTests` (+1).
+
+### Documentation
+
+- **Docs sync после Phase 4.3:** `ai_context.md`, `roadmap.md`, `ux.md`, `api.md`, `architecture.md`, `structure.md`, `session_log.md`, `changelog.md`, корневой `README.md`, `frontend/README.md`. Next — Phase **5** или Pilot.
+
+### Added
+
+- **Phase 4.2 Risks Read API**: `GET /api/risks` (`api.risk.RiskController` / `RiskQueryService` / `RisksResponse`) → `domain.risk.RiskService` (evaluate-on-read). Правила: `STALE_ACTIVITY` (3d), `OPEN_MR_STALE` (5d), `NO_MR`, `JIRA_ACTIVE_NO_GIT`. Конфиг: `risk.stale-activity-days` / `risk.open-mr-stale-days` / `risk.default-limit=100` / `risk.max-limit=200`. **Без** `risk_flags` / JPA risk entity / UI / AI / Kafka/Redis/CQRS / Jenkins / новый ADR. Тесты (+9): `RiskControllerTest` (3), `RiskServiceIntegrationTest` (5), `DeliveryMonitorApplicationTests` (+1). `.\mvnw.cmd clean verify` — **217** тестов (было 208), 0 failures, 0 errors, 2 skipped.
+
+### Documentation
+
+- **Docs sync после Phase 4.2:** `ai_context.md` v2.20, `roadmap.md` v2.16, `architecture.md` v2.18, `api.md` v2.13, `session_log.md`, `changelog.md`. Next — Phase **5** или Pilot.
+
+- **Docs sync после Phase 4.1:** `ai_context.md` v2.19, `roadmap.md` v2.15, `architecture.md` v2.17, `api.md` v2.12, `database.md` v2.6, `session_log.md`, `changelog.md`. Next — **4.2** Risks.
+
+### Added
+
+- **Phase 4.1 Activity Feed Read API**: `GET /api/activity` (`api.activity.ActivityController` / `ActivityQueryService` / `ActivityFeedResponse`) — только PostgreSQL `activity_events` (ADR-008), без новой таблицы / без `domain.activity`. Фильтры: `since`, `limit` (`activity.feed.default-limit=50` / `max-limit=200`), `workstreamType`, `orphans` (default `true`). Shared `api.ActivityEventMapper` с Timeline (summary / actor / payload — без копирования). Liquibase `0008` index `(workstream_type_code, occurred_at)`. Empty → `200` + `{ "events": [] }`. **Не** добавлялись: UI, Risks, event writers, Kafka/Redis/CQRS/AI, новый ADR. Тесты (+9): `ActivityControllerTest` (3), `ActivityQueryServiceIntegrationTest` (5), `DeliveryMonitorApplicationTests` (+1). `.\mvnw.cmd clean verify` — **208** тестов (было 199), 0 failures, 0 errors, 2 skipped.
+
+### Documentation
+
+- **Phase 4 parameters locked (2026-07-20):** перед кодом 4.1/4.2 зафиксированы: Feed — `GET /api/activity`, `activity_events`, без новой таблицы, фильтры `since`/`limit`/`workstreamType`/`orphans` (default `true`); Risks — evaluate-on-read, без `risk_flags`, scope=`workstreams`, `STALE_ACTIVITY=3d`, `OPEN_MR_STALE=5d`, `NO_MR`, `JIRA_ACTIVE_NO_GIT`; out of scope: AI/Kafka/Redis/CQRS/UI/Jenkins/Release Health. Обновлены: `architecture.md` v2.16, `api.md` v2.11, `roadmap.md` v2.14, `decisions.md`, `session_log.md`, `ai_context.md` v2.18. Код не писался.
+
+- **Phase 4 Discovery: Activity Feed + Risks (docs-only, 2026-07-20):** дизайн approved перед кодом. Feed = read той же `activity_events` (ADR-008), без новой таблицы / без `domain.activity`; `GET /api/activity`. Risks = evaluate-on-read в `domain.risk` (без `risk_flags`); первые правила `STALE_ACTIVITY` / `OPEN_MR_STALE` / `NO_MR` / `JIRA_ACTIVE_NO_GIT`; `GET /api/risks` без `sprintId`. Out of scope: AI, Kafka, Redis, CQRS, UI, Jenkins. Обновлены: `roadmap.md` v2.13, `architecture.md` v2.15, `api.md` v2.10, `decisions.md`, `session_log.md`, `ai_context.md` v2.17. Новый ADR не создавался. Код не писался.
 
 - **Docs sync после Live E2E + Phase 3.9:** entry-points выровнены под 3.1–3.9 Done / Live E2E 2026-07-20 / next Phase 4 / 199 tests: `ai_context.md` v2.16, `roadmap.md` v2.12, `architecture.md` v2.14, `integrations.md` v2.4, `api.md` v2.9, `discovery.md` (auth known + service accounts TODO), корневой `README.md`, `backend/README.md` (+ `run-local.cmd.example`).
 

@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0008-activity-events-workstream-type-index
+      author: delivery-monitor
+      comment: >-
+        Phase 4.1 Activity Feed Read API — index supporting filters on
+        workstream_type_code + ORDER BY occurred_at DESC (docs/api.md GET /api/activity).
+        No new table; activity_events remains the single fact store (ADR-008).
+      changes:
+        - createIndex:
+            tableName: activity_events
+            indexName: idx_activity_events_workstream_type_occurred_at
+            columns:
+              - column:
+                  name: workstream_type_code
+              - column:
+                  name: occurred_at

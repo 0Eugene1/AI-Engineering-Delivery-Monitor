@@ -20,5 +20,7 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/0007-workstreams.yaml
       relativeToChangelogFile: false
-  # Next changesets: timeline / workstream read API (Phase 3.7).
+  - include:
+      file: db/changelog/changes/0008-activity-events-workstream-type-index.yaml
+      relativeToChangelogFile: false
   # sprints / sync_state remain deferred (docs/database.md).

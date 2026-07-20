@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.5 |
+| **Version** | 2.6 |
 | **Related** | [architecture.md](./architecture.md), [glossary.md](./glossary.md) |
 
 ## Principles
@@ -48,7 +48,7 @@ workstream_types:
 | `commits` | `repository_id`, `sha`, `issue_key` nullable, … | Dev activity | **Real (Phase 3.4)** — `0005` |
 | `merge_requests` | `(repository_id, gitlab_iid)` UK, `issue_key` nullable, … | Review gate | **Real (Phase 3.4)** — `0005` |
 | `builds` | `jenkins_job`, `build_no`, `status`, `branch`, `mr_iid`, `started_at` | CI result (Jenkins / later pipelines) | Planned — **Phase 5** (не Phase 3) |
-| `activity_events` | `id`, `occurred_at`, `issue_key` nullable, `workstream_type_code`, `actor_*`, `type`, `payload`, `source`, `source_ref` | Timeline + Feed; UNIQUE `(source, source_ref)` | **Real (Phase 3.5 write + 3.7 read)** — `0006`; Feed UI — Phase 4 |
+| `activity_events` | `id`, `occurred_at`, `issue_key` nullable, `workstream_type_code`, `actor_*`, `type`, `payload`, `source`, `source_ref` | Timeline + Feed; UNIQUE `(source, source_ref)` | **Real (Phase 3.5 write + 3.7 Timeline read + 4.1 Feed read)** — `0006` + index `0008`; Feed UI — later |
 | `dependencies` | `from_ws`, `to_ws`, `type`, `source` | Блокеры между workstreams | Planned |
 | `risk_flags` | `issue_id`, `code`, `severity`, `open` | Риски | Planned |
 | `sync_state` | `source`, `last_sync_at`, `cursor` | Watermark scheduler | **Planned / future** — отложено с Phase 2.3, подтверждено отложенным решением Phase 2.5 Scheduler design: incremental sync и watermark/cursor ещё не реализованы (сейчас — full-refresh постраничный upsert по `jira_id` при каждом запуске, в т.ч. из нового `sync.jira.JiraSyncScheduler`); вводится только вместе с incremental sync, отдельной будущей задачей |
@@ -217,6 +217,7 @@ Issue Timeline (`WHERE issue_key = ?`) показывает только linked;
 - `activity_events (source, source_ref)` **UNIQUE** — идемпотентность Phase 3
 - `activity_events (issue_key, occurred_at)` — null `issue_key` допустим (orphan)
 - `activity_events (occurred_at DESC)`
+- `activity_events (workstream_type_code, occurred_at)` — **Real (Phase 4.1, Liquibase `0008`)** — Feed filter by type + `ORDER BY occurred_at`
 - `workstreams (issue_key, workstream_type_code)` **UNIQUE** — identity (ADR-002); `repository_id` не в ключе
 - `workstreams (repository_id)` — optional lookup; null допустим (non-Git)
 - `issues (sprint_id)`, `issues (fix_version)`

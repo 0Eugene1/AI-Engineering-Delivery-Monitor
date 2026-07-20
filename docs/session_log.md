@@ -18,6 +18,226 @@
 
 ---
 
+## 2026-07-20 — Frontend UI: русская локализация
+
+**Stage:** После Phase 4.3 — UI copy (без смены API/функциональности).
+
+**Summary:** Все пользовательские строки React UI переведены на русский. Мапперы в `frontend/src/lib/labels.ts` (риски, типы событий, workstream codes) и `eventDetail` в `format.ts` (русские detail-строки вместо английских `summary` с backend). Backend / API / контракты не трогались. i18n-библиотеки не добавлялись.
+
+**Decisions:** Локализация только на frontend; `displayName` workstream и `summary` событий маппятся по code/type+payload, без изменения seed/API.
+
+**Docs touched:** `session_log.md`, `changelog.md`, `ux.md` v2.3, `ai_context.md` v2.22, `frontend/README.md`, корневой `README.md`.
+
+**Next:** Phase 5 или Pilot; при появлении новых risk/event codes — дописать мапперы в `labels.ts` / `format.ts`.
+
+---
+
+## 2026-07-20 — Phase 4.3 Delivery Dashboard (UI)
+
+**Stage:** Phase 4.3 — **Done** (минимальный продуктовый UI поверх read API).
+
+**Summary:** React dashboard в `frontend/`: Dashboard, Activity Feed, Issue Timeline. Тонкий backend `GET /api/workstreams/progress` для Projects bars.
+
+### Экраны
+
+| Route | Screen | Источники |
+|---|---|---|
+| `/` | Dashboard — Projects / Risks / Latest activity | `/api/workstreams/progress`, `/api/risks`, `/api/activity` |
+| `/activity` | Activity Feed (день → события) | `/api/activity`, `/api/workstream-types` |
+| `/issues/:key` | Issue Timeline + Jira status | `/api/issues/{key}`, `/api/issues/{key}/timeline` |
+
+### Реализация
+
+- Stack: Vite + React + TypeScript + React Router; proxy `/api` → `localhost:8080` (без CORS на backend).
+- Progress formula: `percent = round(100 * merged / total)` по `workstreams.derived_status`, строки = active `workstream_types`.
+- Read-only; типы не хардкодятся.
+
+### Не делалось
+
+- Sprint Board / `sprints` / Release Health / Jenkins
+- Auth UI / OIDC / design system / AI Summary
+- Packaging SPA в Spring JAR
+
+**Tests:** `WorkstreamProgressControllerTest` (+1), `DeliveryMonitorApplicationTests` (+1 smoke). Frontend: `npm run build` OK.
+
+**Docs touched:** `session_log.md`, `changelog.md`, `api.md`, `ux.md`, `roadmap.md`, `architecture.md`, `ai_context.md`, `structure.md`, `README.md`, `frontend/README.md`.
+
+**Next:** Phase **5** (Jenkins / Release Health) или Pilot.
+
+---
+
+## 2026-07-20 — Phase 4.2 Risks Read API
+
+**Stage:** Phase 4.2 ([roadmap.md](./roadmap.md)) — **Done**.
+
+**Summary:** Реализован `GET /api/risks` — evaluate-on-read риски без таблицы `risk_flags` и без JPA risk entity.
+
+### Архитектура
+
+```
+api.risk  →  domain.risk  →  workstream / timeline / gitlab / issue
+```
+
+### Реализация
+
+| Компонент | Детали |
+|---|---|
+| Endpoint | `GET /api/risks` |
+| Пакет API | `api.risk` (`RiskController` / `RiskQueryService` / `RisksResponse`) |
+| Пакет domain | `domain.risk` (`Risk` / `RiskService` / `RiskCodes` / `RiskSeverities` / `RiskProperties`) |
+| Фильтры | `severity`, `code`, `issueKey`, `limit` (default 100 / max 200) |
+| Пороги | `risk.stale-activity-days=3`, `risk.open-mr-stale-days=5` |
+| Правила | `STALE_ACTIVITY`, `OPEN_MR_STALE`, `NO_MR`, `JIRA_ACTIVE_NO_GIT` |
+
+### Правила (кратко)
+
+1. **STALE_ACTIVITY** (MEDIUM) — workstream `in_progress`/`in_review`, последняя активность по `(issue_key, type)` старше 3d.
+2. **OPEN_MR_STALE** (MEDIUM) — открытый MR (по `issue_key` + `repository_id`) старше 5d.
+3. **NO_MR** (LOW) — workstream без MR в состоянии `opened`/`merged`.
+4. **JIRA_ACTIVE_NO_GIT** (MEDIUM) — issue с `status_category` name = `In Progress` без workstream и без `activity_events`.
+
+Orphan Git (`issue_key` null) risks не создаёт.
+
+### Не делалось
+
+- `risk_flags` / persistence / JPA risk entity
+- UI / AI / Kafka / Redis / CQRS / Jenkins
+- ADR (архитектура не менялась)
+
+**Tests:** `RiskControllerTest` (3), `RiskServiceIntegrationTest` (5), `DeliveryMonitorApplicationTests` (+1 smoke). `.\mvnw.cmd clean verify` — **217** тестов (было 208), 0 failures, 0 errors, 2 skipped.
+
+**Docs touched:** `session_log.md`, `changelog.md`, `api.md`, `architecture.md`, `roadmap.md`, `ai_context.md`.
+
+**Code touched:** `domain.risk.*`, `api.risk.*`, query helpers в `ActivityEventRepository` / `MergeRequestRepository` / `IssueRepository` / `WorkstreamRepository`, `application.yml`.
+
+**Next:** Phase **5** (Jenkins / CI + Release Health) или Pilot — по [roadmap.md](./roadmap.md).
+
+---
+
+## 2026-07-20 — Phase 4.1 Activity Feed Read API
+
+**Stage:** Phase 4.1 ([roadmap.md](./roadmap.md)) — **Done**.
+
+**Summary:** Реализован `GET /api/activity` — командная лента поверх той же `activity_events` (ADR-008), без новой таблицы и без `domain.activity`. Presentation mapping (summary / actor / payload) вынесен в shared `api.ActivityEventMapper` и переиспользован Timeline.
+
+### Архитектура
+
+```
+api.activity  →  domain.timeline  →  activity_events (PostgreSQL)
+```
+
+### Реализация
+
+| Компонент | Детали |
+|---|---|
+| Endpoint | `GET /api/activity` |
+| Пакет | `api.activity` (`ActivityController` / `ActivityQueryService` / `ActivityFeedResponse` / `ActivityFeedProperties`) |
+| Фильтры | `since`, `limit`, `workstreamType`, `orphans` (default `true`) |
+| Limit config | `activity.feed.default-limit=50`, `activity.feed.max-limit=200` |
+| Mapping | `api.ActivityEventMapper` (shared с Timeline) |
+| Repository | `ActivityEventRepository.findFeed(...)` |
+| Index | Liquibase `0008` — `(workstream_type_code, occurred_at)` |
+
+### Не делалось
+
+- новая таблица `activity` / пакет `domain.activity`
+- новые event writers
+- UI / Kafka / Redis / CQRS / AI / Risks
+- ADR (архитектура не менялась)
+
+**Tests:** `ActivityControllerTest` (3), `ActivityQueryServiceIntegrationTest` (5), `DeliveryMonitorApplicationTests` (+1 smoke). `.\mvnw.cmd clean verify` — **208** тестов (было 199), 0 failures, 0 errors, 2 skipped.
+
+**Docs touched:** `session_log.md`, `changelog.md`, `api.md`, `architecture.md`, `roadmap.md`, `ai_context.md`, `database.md`.
+
+**Code touched:** `api.activity.*`, `api.ActivityEventMapper`, `api.issue.TimelineQueryService` (рефактор на shared mapper), `domain.timeline.ActivityEventRepository`, Liquibase `0008`, `application.yml`.
+
+**Next:** **4.2** Risks Read API (`GET /api/risks`, evaluate-on-read).
+
+---
+
+## 2026-07-20 — Phase 4 parameters locked (перед 4.1 / 4.2)
+
+**Stage:** Phase 4 Discovery follow-up — параметры **зафиксированы**. Код **не** писался.
+
+**Summary:** Закрыты open questions Discovery. Design freeze перед реализацией 4.1 / 4.2.
+
+### 4.1 Activity Feed — freeze
+
+| | |
+|---|---|
+| Endpoint | `GET /api/activity` |
+| Источник | `activity_events` |
+| Новая таблица | **Нет** |
+| Фильтры | `since`, `limit`, `workstreamType`, `orphans` |
+| Default | `orphans=true` |
+
+### 4.2 Risks — freeze
+
+| | |
+|---|---|
+| Endpoint | `GET /api/risks` |
+| Режим | evaluate-on-read |
+| Persistence | **без** `risk_flags` |
+| Scope | **только `workstreams`** (не полный scan ~3506 issues для workstream-правил) |
+
+| Rule | Параметр |
+|---|---|
+| `STALE_ACTIVITY` | **3 days** |
+| `OPEN_MR_STALE` | **5 days** |
+| `NO_MR` | workstream без MR |
+| `JIRA_ACTIVE_NO_GIT` | active Jira issue без Git-сигнала |
+
+### Out of scope (подтверждено)
+
+AI · Kafka · Redis · CQRS · UI · Jenkins · Release Health
+
+**Docs touched:** `session_log.md`, `architecture.md`, `api.md`, `decisions.md`, `roadmap.md`, `changelog.md`, `ai_context.md`.
+
+**Code touched:** none.
+
+**Next:** go-ahead → **4.1** Activity Feed Read API → **4.2** Risks.
+
+---
+
+## 2026-07-20 — Phase 4 Discovery: Activity Feed + Risks (docs-only)
+
+**Stage:** Phase 4.0 Discovery ([roadmap.md](./roadmap.md)) — **approved**. Код **не** писался. Новый ADR **не** создавался.
+
+**Summary:** Спроектированы Activity Feed и Risks поверх уже существующих данных после Live E2E (`activity_events` ~5640, workstreams, merge_requests, issues). Без AI / Kafka / Redis / CQRS / UI / Jenkins.
+
+### Activity Feed
+
+| Вопрос | Решение |
+|---|---|
+| Назначение | Командная лента «что происходит» (дополняет Issue Timeline) |
+| API | `GET /api/activity?since&limit&workstreamType&orphans` |
+| Источник | Та же `activity_events` (ADR-008) |
+| Новая таблица? | **Нет** |
+| Domain persistence? | **Нет** — `api.activity` → `domain.timeline`; пакет `domain.activity` не создаём |
+| Orphans | В Feed **по умолчанию** |
+
+### Risks
+
+| Вопрос | Решение |
+|---|---|
+| Первые правила (без AI) | `STALE_ACTIVITY`, `OPEN_MR_STALE`, `NO_MR`, `JIRA_ACTIVE_NO_GIT` |
+| Источники | workstreams + activity_events; merge_requests; issues + workstreams + events |
+| Persistence `risk_flags`? | **Нет** в Phase 4 — evaluate-on-read |
+| Модель | Логический `Risk` в `domain.risk` (не JPA) → `api.risk` |
+| API | `GET /api/risks` **без** `sprintId` (нет `sprints`) |
+
+### Open questions
+
+**Закрыты 2026-07-20** — см. запись «Phase 4 parameters locked» выше. Пороги 3/5 дней; scope = `workstreams`; out of scope подтверждён.
+
+**Docs touched:** `roadmap.md` (v2.13), `architecture.md` (v2.15), `api.md` (v2.10), `decisions.md`, `session_log.md`, `changelog.md`, `ai_context.md` (v2.17).
+
+**Code touched:** none.
+
+**Next:** *(исторически)* → parameters locked → 4.1 / 4.2.
+
+---
+
 ## 2026-07-20 — Live E2E validation: Jira + GitLab → Timeline
 
 **Stage:** Operational validation (код продукта не менялся). Milestone: первый полный путь на production-like данных без mock.

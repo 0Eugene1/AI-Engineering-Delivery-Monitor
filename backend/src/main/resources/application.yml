@@ -87,6 +87,21 @@ gitlab:
     # For mock/local, set gitlab.sync.repositories under profile `gitlab-mock`
     # (see application-gitlab-mock.yml).
 
+# Activity Feed Read API (Phase 4.1, docs/api.md GET /api/activity). Defaults for limit when
+# the query param is omitted; requested limit is clamped to max-limit.
+activity:
+  feed:
+    default-limit: ${ACTIVITY_FEED_DEFAULT_LIMIT:50}
+    max-limit: ${ACTIVITY_FEED_MAX_LIMIT:200}
+
+# Risks Read API (Phase 4.2, docs/api.md GET /api/risks). Evaluate-on-read thresholds;
+# no risk_flags persistence.
+risk:
+  stale-activity-days: ${RISK_STALE_ACTIVITY_DAYS:3}
+  open-mr-stale-days: ${RISK_OPEN_MR_STALE_DAYS:5}
+  default-limit: ${RISK_DEFAULT_LIMIT:100}
+  max-limit: ${RISK_MAX_LIMIT:200}
+
 # Minimal admin auth baseline (Phase 2.4, ADR-012). Gates POST /api/admin/** with a static Bearer
 # token — stateless check, no user identity is derived from it (docs/security.md §2, §7).
 # DELIVERY_MONITOR_ADMIN_TOKEN is a separate secret from JIRA_TOKEN (different trust boundaries,

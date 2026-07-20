@@ -133,4 +133,38 @@ class DeliveryMonitorApplicationTests {
         assertThat(response.getBody()).contains("\"code\":\"backend\"");
         assertThat(response.getBody()).contains("\"displayName\":\"Backend\"");
     }
+
+    @Test
+    void activityFeedEndpointIsPublicAndReturnsEmptyEventsWhenNothingStored() {
+        // Phase 4.1: empty feed is 200 + events:[], not 404.
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "http://localhost:" + port + "/api/activity", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"events\":[]");
+    }
+
+    @Test
+    void risksEndpointIsPublicAndReturnsEmptyRisksWhenNothingStored() {
+        // Phase 4.2: empty risks is 200 + risks:[], not 404.
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "http://localhost:" + port + "/api/risks", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"risks\":[]");
+    }
+
+    @Test
+    void workstreamProgressEndpointIsPublicAndReturnsActiveTypes() {
+        // Phase 4.3: progress rows for active types even when no workstreams exist.
+        TestRestTemplate restTemplate = new TestRestTemplate();
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "http://localhost:" + port + "/api/workstreams/progress", String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"code\":\"backend\"");
+        assertThat(response.getBody()).contains("\"percent\":0");
+    }
 }

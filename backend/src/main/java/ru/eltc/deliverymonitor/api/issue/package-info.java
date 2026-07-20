@@ -9,6 +9,8 @@
  * </pre>
  *
  * <p>Never calls {@code sync.*} / {@code integration.*} / live Jira or GitLab.
+ * Timeline presentation mapping is shared with Activity Feed via
+ * {@link ru.eltc.deliverymonitor.api.ActivityEventMapper}.
  *
  * <ul>
  *   <li>{@link ru.eltc.deliverymonitor.api.issue.IssueController} /
@@ -25,6 +27,6 @@
  * </ul>
  *
  * <p><b>Out of scope:</b> {@code GET /api/sprints/current}; optional nested {@code workstreams[]}
- * on issue detail; Activity Feed; write API; security changes.
+ * on issue detail; write API; security changes. Activity Feed lives in {@code api.activity}.
  */
 package ru.eltc.deliverymonitor.api.issue;

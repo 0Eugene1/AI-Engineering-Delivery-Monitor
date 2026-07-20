@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.14 |
+| **Version** | 2.20 |
 | **Related** | [vision.md](./vision.md), [database.md](./database.md), [integrations.md](./integrations.md), [decisions.md](./decisions.md), [security.md](./security.md) |
 
 ## Overview
@@ -37,7 +37,7 @@ Cursor canvas `architecture-design.canvas.tsx` — только локальны
 | Database | PostgreSQL |
 | Ingest | `@Scheduled` pollers + optional webhooks → сразу в БД |
 | API | REST |
-| Frontend | React |
+| Frontend | React (Phase 4.3: Vite SPA in `frontend/`, UI на русском) |
 | AI | Отдельный сервис поверх REST (не в monolith) |
 
 ## Data flow
@@ -86,11 +86,11 @@ PostgreSQL  →  domain.issue  →  api.issue
 | `domain.workstream_type` | **Phase 3.3 реализовано:** справочник типов (Liquibase seed, не хардкод) | Yes |
 | `domain.repository` | **Phase 3.3 реализовано:** GitLab project → `workstream_type_code` (таблица `repositories`; matching по `gitlab_project_id`, не по path/name); `RepositoryPersistencePort` | Yes |
 | `domain.gitlab` | **Phase 3.4 реализовано:** persistence `branches` / `commits` / `merge_requests` + upsert ports; wired из `sync.gitlab` | Yes |
-| `domain.timeline` | **Phase 3.5 write + 3.7 read:** `IssueKeyExtractor` + `activity_events` upsert; Timeline Read API (`api.issue.TimelineController`). Activity Feed read — Phase 4 | Yes |
-| `domain.activity` | Командный activity feed (read API — Phase 4; пишет в ту же `activity_events`) | Yes (Phase 4 UI) |
-| `domain.release` | Release Health по fixVersion | Yes |
-| `domain.risk` | Правила рисков | Yes |
-| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4 + Phase 3.7–3.8). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`. `api.admin.GitLabSyncController` (**Phase 3.8**): `POST /api/admin/sync/gitlab`, тонкий HTTP-адаптер над `sync.gitlab.GitLabSyncService#syncAll()`, реюзает `GitLabSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`), `TimelineController` (`GET /api/issues/{key}/timeline` — только `activity_events`, `occurred_at DESC`, empty → `200` + `[]`, без требования `IssueEntity`), `IssueQueryService` / `TimelineQueryService`, DTO. `api.workstream` — `WorkstreamTypeController` (`GET /api/workstream-types`). Зависит только от domain — без live Jira/GitLab. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
+| `domain.timeline` | **Phase 3.5 write + 3.7 Timeline read + 4.1 Feed read:** `IssueKeyExtractor` + `activity_events` upsert; Timeline Read API; Activity Feed читает **ту же** таблицу (ADR-008); index `(workstream_type_code, occurred_at)` (`0008`) | Yes |
+| `domain.activity` | **Не нужен в Phase 4** — Feed = `api.activity` → `domain.timeline` (симметрия Timeline в `api.issue`). Отдельный persistence-пакет не создаём | No (Phase 4) |
+| `domain.release` | Release Health по fixVersion | Yes (Phase 5) |
+| `domain.risk` | **Phase 4.2 Done:** правила рисков (evaluate-on-read); **без** таблицы `risk_flags` | Yes |
+| `api` | REST controllers + минимальный security enforcement — **реализовано** (Phase 2.4 + Phase 3.7–3.8 + **Phase 4.1–4.3**). `api.admin.JiraSyncController`: `POST /api/admin/sync/jira`. `api.admin.GitLabSyncController` (**Phase 3.8**): `POST /api/admin/sync/gitlab`, тонкий HTTP-адаптер над `sync.gitlab.GitLabSyncService#syncAll()`, реюзает `GitLabSyncResult` (без отдельного response DTO). `api.security`: `SecurityConfig` (`SecurityFilterChain` — `/actuator/health` открыт, `/api/admin/**` и прочие `/actuator/**` (в т.ч. `/actuator/info`) требуют аутентификации, CSRF off, sessions `STATELESS`, отказ → `401`; остальное как было), `AdminTokenAuthenticationFilter` (`OncePerRequestFilter`, сравнивает `Authorization: Bearer <token>` с конфигом), `AdminTokenProperties` (`delivery-monitor.admin.token` ⇐ `DELIVERY_MONITOR_ADMIN_TOKEN`, fail-fast). Bearer admin-token на `/api/admin/**`, [ADR-012](./adr/0012-minimal-auth-baseline-admin-endpoints.md). `api.issue` — Read API: `IssueController` (`GET /api/issues`, `GET /api/issues/{key}`), `TimelineController` (`GET /api/issues/{key}/timeline` — только `activity_events`, `occurred_at DESC`, empty → `200` + `[]`, без требования `IssueEntity`), `IssueQueryService` / `TimelineQueryService`, DTO. `api.workstream` — `WorkstreamTypeController` (`GET /api/workstream-types`); **`WorkstreamProgressController` (Phase 4.3)** (`GET /api/workstreams/progress` — Projects bars, `merged/total`). **`api.activity` (Phase 4.1 Done):** `ActivityController` / `ActivityQueryService` / `ActivityFeedResponse` — `GET /api/activity` (фильтры `since`/`limit`/`workstreamType`/`orphans`, default orphans=`true`); shared `api.ActivityEventMapper` с Timeline; `activity.feed.default-limit`/`max-limit`. **`api.risk` (Phase 4.2 Done):** `RiskController` / `RiskQueryService` / `RisksResponse` — `GET /api/risks` (evaluate-on-read через `domain.risk.RiskService`); фильтры `severity`/`code`/`issueKey`/`limit`; пороги `risk.stale-activity-days`/`open-mr-stale-days`. UI: `frontend/` React SPA (Dashboard / Activity Feed / Issue Timeline). Зависит только от domain — без live Jira/GitLab. `GET /api/sprints/current` — не реализован (нет `sprints` persistence, см. [database.md](./database.md), [discovery.md](./discovery.md)) | Yes |
 | AI Summary service | REST → LLM → markdown | After MVP |
 
 ## Core abstractions
@@ -140,7 +140,7 @@ integration.gitlab  →  sync.gitlab  →  domain.repository
                                     →  domain.timeline (activity_events)
                                     →  domain.workstream (+ domain.workstream_type)
 
-PostgreSQL  →  domain.timeline / domain.workstream  →  api.issue (timeline) / api.workstream
+PostgreSQL  →  domain.timeline / domain.workstream  →  api.issue (timeline) / api.activity (feed) / api.workstream
 ```
 
 `api.admin` вызывает `sync.gitlab` (как сейчас `sync.jira`); read API **не** ходит в GitLab live.
@@ -241,6 +241,75 @@ GET /api/issues/{key}/timeline
 ### Out of scope Phase 3
 
 AI Summary · Kafka · Redis · CQRS · GraphQL · notifications · Jenkins/`builds` · pipelines table · Activity Feed UI · Risks · Release Health · `people` · `sprints` · full historical commit import.
+
+## Phase 4 — Activity Feed + Risks (4.1–4.2 Done)
+
+> Design status: **approved + parameters locked** (2026-07-20). **4.1 и 4.2 реализованы.** См. [roadmap.md](./roadmap.md) tasks 4.0–4.2, [api.md](./api.md) § Phase 4, [decisions.md](./decisions.md).
+
+### Целевая зависимость пакетов
+
+```
+PostgreSQL activity_events  →  domain.timeline  →  api.activity   (Feed)   ← 4.1 Done
+PostgreSQL workstreams /
+         (+ activity_events, merge_requests, issues as needed)
+                            →  domain.risk      →  api.risk       (Risks)  ← 4.2 Done
+```
+
+Read API **не** ходит в Jira/GitLab live. Новых sync-writers в Phase 4 **нет**.
+
+### Activity Feed (4.1 — implemented)
+
+| Вопрос | Решение |
+|---|---|
+| Endpoint | `GET /api/activity` |
+| Назначение | Командная лента «что происходит» (standup / GitHub-style), дополняет Issue Timeline (per-key) |
+| Источник | Та же `activity_events` ([ADR-008](./adr/0008-activity-events.md)) |
+| Новая таблица? | **Нет** |
+| Отдельный domain persistence? | **Нет** — пакет `domain.activity` в Phase 4 **не** создаём; Feed = `api.activity` → `domain.timeline` |
+| Фильтры | `since`, `limit`, `workstreamType`, `orphans` |
+| Default orphans | **`true`** |
+| Сортировка | `ORDER BY occurred_at DESC` |
+| Mapping | Shared `api.ActivityEventMapper` (summary / actor / payload) с Timeline — без копирования |
+| Index | Liquibase `0008`: `(workstream_type_code, occurred_at)` |
+| Config | `activity.feed.default-limit=50`, `activity.feed.max-limit=200` |
+
+Timeline vs Feed:
+
+| | Issue Timeline | Activity Feed |
+|---|---|---|
+| Filter | `issue_key = ?` | global (+ optional `workstreamType` / `since`) |
+| Orphans | нет (ключ обязателен в path) | да (`orphans=true` default) |
+| Empty | `200` + `[]` | `200` + `[]` |
+| Package | `api.issue` | `api.activity` |
+
+### Risks (4.2 — implemented)
+
+| Вопрос | Решение |
+|---|---|
+| Endpoint | `GET /api/risks` |
+| Модель | Логический `Risk` (code, severity, issueKey, workstreamType?, explanation, detectedAt, evidence) — **не** JPA entity |
+| Persistence `risk_flags`? | **Нет** — evaluate-on-read |
+| Пакет | `domain.risk` (`RiskService`) → `api.risk` (`RiskController` / `RiskQueryService`) |
+| **Scope** | **Только `workstreams`** для workstream-правил; `JIRA_ACTIVE_NO_GIT` — anti-join от active issues (`status_category` name = `In Progress`) |
+| AI / sprintId? | **Нет** |
+
+#### Правила (locked + implemented)
+
+| Code | Severity | Условие | Порог / notes | Источник |
+|---|---|---|---|---|
+| `STALE_ACTIVITY` | MEDIUM | Workstream `in_progress` / `in_review`, последнее событие по `issue_key` (+ type) устарело | **`risk.stale-activity-days=3`** | `workstreams` + `activity_events` |
+| `OPEN_MR_STALE` | MEDIUM | Open MR, привязанный к workstream (`issue_key` + `repository_id`), старше порога | **`risk.open-mr-stale-days=5`** | `workstreams` → `merge_requests` |
+| `NO_MR` | LOW | Workstream без MR (`opened`/`merged`) | workstream без MR | `workstreams` + `merge_requests` |
+| `JIRA_ACTIVE_NO_GIT` | MEDIUM | Active Jira issue (`status_category` name = `In Progress`) без Git-сигнала (нет workstream и нет `activity_events` по ключу) | anti-join от active issues | `issues` + `workstreams` + `activity_events` |
+
+`JIRA_ACTIVE_NO_GIT` — единственное правило, стартующее от `issues` (ищет отсутствие workstream/Git). Остальные — от `workstreams`. Orphan Git (`issue_key` null) **не** создаёт risks.
+
+**Не** в Phase 4: `BUILD_FAILED` (Jenkins), Jira blockers, QA-not-started, Release imbalance, AI-inferred risks.
+
+### Out of scope Phase 4 (after 4.3)
+
+AI · Kafka · Redis · CQRS · Sprint Board / `sprints` · Jenkins/`builds` · pipelines · Release Health · `risk_flags` table · новые event writers · People · corporate SSO UI.  
+(Minimal React Дашборд / Лента / История задачи — **Done in 4.3**; UI на русском без смены API.)
 
 ## Architectural risks
 

@@ -3,27 +3,54 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.1 |
+| **Version** | 2.3 |
 | **Related** | [vision.md](./vision.md), [api.md](./api.md), [roadmap.md](./roadmap.md) |
 
 ## Design principles
 
 1. **Timeline-first** — главный ответ на «что с задачей» — хронология событий.
 2. **Задачи важнее людей** — People/WIP не в MVP.
-3. **Типы из конфига** — подписи Workstream Type приходят из API (`workstream-types`), не захардкожены в UI.
+3. **Типы из конфига** — набор Workstream Type приходит из API (`workstream-types`); UI не хардкодит список типов. Известные `code` → русские подписи маппятся на frontend (`labels.ts`); неизвестные — fallback на `displayName` API.
 4. **Без ручного ввода** — UI только читает Monitor.
+5. **UI на русском** — пользовательские тексты (заголовки, риски, типы событий, empty/error) локализованы во frontend без i18n-библиотеки и без смены API. Технические идентификаторы (issue keys, MR `!N`, Git/Jira) остаются как есть.
 
 ## Screens
 
-| Screen | Purpose | Priority |
-|---|---|---|
-| Sprint Board | Задачи спринта + workstreams + risk badges | P0 |
-| Issue Detail + Timeline | Хронология по Workstream Type + MR/Build | P0 (hero) |
-| Activity Feed | Лента команды (как GitHub) | P0 |
-| Release Health | `%` готовности по каждому Workstream Type для fixVersion | P0 |
-| Risks | Список/фильтр на Board | P1 |
-| People / WIP | Нагрузка людей | After pilot |
-| AI Summary | Кнопка Summarize → отдельный сервис | After MVP |
+| Screen | Purpose | Priority | Status |
+|---|---|---|---|
+| **Дашборд (Монитор доставки)** | Проекты + агрегаты рисков + последняя активность | P0 | **Done (4.3)** — `/` |
+| Sprint Board | Задачи спринта + workstreams + risk badges | P0 | Deferred (нет `sprints`) |
+| История задачи (Timeline) | Хронология по Workstream Type + MR/Build | P0 (hero) | **Done (4.3)** — `/issues/:key` |
+| Лента активности | Лента команды (как GitHub) | P0 | **Done (4.3)** — `/activity` |
+| Release Health | `%` готовности по каждому Workstream Type для fixVersion | P0 | Phase 5 |
+| Риски | Список/фильтр на Board | P1 | Агрегаты на дашборде (4.3) |
+| People / WIP | Нагрузка людей | After pilot | — |
+| AI Summary | Кнопка Summarize → отдельный сервис | After MVP | — |
+
+## Delivery Dashboard (Phase 4.3)
+
+Минимальный главный экран (`frontend/`, route `/`):
+
+```text
+Монитор доставки
+
+Проекты
+Бэкенд    ████████░░ 80%
+Фронтенд  ██████░░░░ 60%
+
+Риски
+🔴 12 Просроченный открытый Merge Request
+🟡 24 Нет активности
+🟠 5 Jira без Git-активности
+
+Последняя активность
+MPTPSUPP-43006
+  Merge Request смержен
+  Коммит
+```
+
+Источники: `GET /api/workstreams/progress`, `GET /api/risks`, `GET /api/activity`.
+Клик по issue key → История задачи. Набор типов — из API; русские подписи известных codes — frontend mapper.
 
 ## Sprint Board
 
@@ -61,17 +88,19 @@ MPTPSUPP-1234
 
 Пользователь должен за секунды понять: кто работал, в каком порядке шли Workstream Types, где застряли.
 
-## Activity Feed
+## Лента активности (Activity Feed)
 
-Глобальная лента последних событий команды:
+Глобальная лента последних событий команды (`/activity`):
 
 ```text
-10:12  Иван     MR merged          MPTPSUPP-1201  backend
-10:18  —        commit             MPTPSUPP-1234  oracle
-10:25  Мария    WORKSTREAM_STARTED MPTPSUPP-1188  qa
+Сегодня
+🌱 MPTPSUPP-1201  Создана ветка     👤 Иван     Бэкенд
+💻 MPTPSUPP-1234  Коммит            👤 —        Oracle
+🔀 MPTPSUPP-1188  Открыт Merge Request  👤 Мария  QA
 ```
 
-Фильтры (MVP-минимум): по Workstream Type, по issue key (опционально позже).
+Фильтры (MVP-минимум): по Workstream Type (`Все` + типы из API), по issue key (опционально позже).
+Подписи событий/рисков: `frontend/src/lib/labels.ts`; detail-строки timeline: `eventDetail` в `format.ts` (не английский `summary` с backend).
 
 ## Release Health
 

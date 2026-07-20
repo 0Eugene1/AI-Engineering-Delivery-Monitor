@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Version** | 2.12 |
+| **Version** | 2.18 |
 | **Related** | [vision.md](./vision.md), [architecture.md](./architecture.md), [ux.md](./ux.md), [discovery.md](./discovery.md) |
 
 ## Guiding rule
@@ -40,7 +40,11 @@
 | Phase 3.7 Read API (`GET /api/issues/{key}/timeline`, `GET /api/workstream-types`) | **Done** |
 | Phase 3.8 Admin sync HTTP (`POST /api/admin/sync/gitlab`) | **Done** — mock e2e + **Live E2E 2026-07-20** (rest+rest) |
 | Phase 3.9 Reconcile scheduler | **Done** |
-| Phase 4+ (Activity Feed / Risks / Jenkins / Release Health / AI Summary) | Не начаты |
+| Phase 4 Discovery (Activity Feed + Risks design) | **Done** (docs-only, 2026-07-20) |
+| Phase 4.1 Activity Feed Read API | **Done** |
+| Phase 4.2 Risks Read API | **Done** |
+| Phase 4.3 Delivery Dashboard (UI) | **Done** — React minimal: Дашборд / Лента / История задачи + `GET /api/workstreams/progress`; UI на русском |
+| Phase 5+ (Jenkins / Release Health / AI Summary) | Не начаты |
 
 **Замечание по нумерации:** в плановых таблицах ниже endpoint `POST /api/admin/sync/jira` отнесён к Phase 2.2, а «REST API» (read) — к Phase 2.4. Фактически admin-sync endpoint был выделен в **отдельный** шаг и во всей остальной документации помечен как **Phase 2.4**; read API и scheduler, соответственно, сдвинулись на Phase 2.5+.
 
@@ -58,7 +62,7 @@
 | **2.4 REST API** | 1–2 days | Read API для UI | `GET /api/issues` — **Done**; `GET /api/sprints/current` — отложен (нет `sprints` persistence) |
 | **2.5 Jira Scheduler** *(после 2.4)* | 1 day | Polling 2–5 min | Фоновый sync без ручного POST — **Done** |
 | **3. GitLab + Timeline** | 1.5–2 weeks | Workstreams + Issue Timeline | ≥90% задач с naming → события в Timeline |
-| **4. Activity Feed + Risks** | 3–5 days | Лента + risk badges | Стендап по Risks/Feed |
+| **4. Activity Feed + Risks** | 3–5 days | Лента + risk badges (backend read API) | `GET /api/activity` + `GET /api/risks` из PostgreSQL; стендап без UI |
 | **5. Jenkins / CI + Release Health** | ~1 week | Builds + % по Workstream Type | Failed build → risk |
 | **6. Pilot** | 2 sprints | Shadow mode рядом с Jira | Нет обязательного ручного ввода |
 | **7. AI Summary** | after MVP | Отдельный сервис | Summary только из REST Monitor |
@@ -77,7 +81,39 @@ Phase 2.4 REST API         ← GET /api/issues
 Phase 2.5 Scheduler        ← polling (после того как ручной sync стабилен) — Done
        ↓
 Phase 3 GitLab + Timeline  ← 3.1–3.9 Done
+       ↓
+Phase 4 Activity Feed + Risks  ← 4.1–4.2 Done
+       ↓
+Phase 4.3 Delivery Dashboard UI  ← Done (minimal React)
 ```
+
+---
+
+## Phase 4 — Activity Feed + Risks
+
+> **Статус (2026-07-20):** **4.1–4.3 Done**. Discovery approved + parameters locked; read API + минимальный UI.  
+> Полный дизайн: [architecture.md](./architecture.md) § Phase 4, [api.md](./api.md) § Phase 4, [ux.md](./ux.md), [decisions.md](./decisions.md) Design notes.  
+> Предусловие: Live E2E доказал, что `activity_events` заполнены (~5640 событий); Timeline уже читает ту же таблицу (ADR-008).
+
+**Правило Phase 4 (4.0–4.2):** только **read API** поверх уже существующих данных. Без новых writers sync, без AI/Kafka/Redis/CQRS/Jenkins/Release Health.
+
+**Phase 4.3:** минимальный React product layer (не полный Sprint Board).
+
+| Task | Scope | **Не делать** на этом шаге | Done when | Status |
+|---|---|---|---|---|
+| **4.0 Discovery** | Дизайн Feed + Risks; контракты; правила без AI; persistence да/нет | Код, миграции, UI | Docs approved; open questions закрыты | **Done** |
+| **4.1 Activity Feed Read API** | `GET /api/activity` — `activity_events`; фильтры `since`/`limit`/`workstreamType`/`orphans` (default `true`); без новой таблицы | `domain.activity` persistence, UI, write path | curl → JSON лента из PostgreSQL | **Done** |
+| **4.2 Risks (computed)** | `GET /api/risks` — evaluate-on-read; scope = **workstreams**; правила: `STALE_ACTIVITY` (3d), `OPEN_MR_STALE` (5d), `NO_MR`, `JIRA_ACTIVE_NO_GIT` | `risk_flags`, dismiss/ack, AI, Jenkins, UI, Release Health | curl → JSON список рисков | **Done** |
+| **4.3 Delivery Dashboard (UI)** | React: Dashboard / Activity Feed / Issue Timeline; `GET /api/workstreams/progress` | Sprint Board, Release Health, Jenkins, auth UI, SPA-in-JAR | `npm run dev` → три экрана на live/mock API | **Done** |
+
+### Phase 4 out of scope (явно, после 4.3)
+
+- AI Summary, Kafka, Redis, CQRS, GraphQL, notifications
+- Full Sprint Board / `sprints` / `GET /api/sprints/current`
+- Jenkins / `builds` / pipelines / Release Health (Phase 5)
+- Persistence `risk_flags` (до dismiss/ack)
+- Новые writers в `activity_events` (`JIRA_*`, `BUILD_*`)
+- People, webhooks, corporate SSO UI
 
 ---
 
@@ -223,3 +259,15 @@ Out of MVP:
 **v2.11 (2026-07-20):** Phase **3.9 Done** — `sync.gitlab.GitLabSyncScheduler` (`SchedulingConfigurer`, `fixedDelay`, `gitlab.sync.enabled`/`interval`); in-process guard в `GitLabSyncService`. Next — Phase **4**.
 
 **v2.12 (2026-07-20):** **Live E2E** validated — rest+rest на личных PAT (~3506 Jira issues; 3 GitLab repos; sample `MPTPSUPP-43006`). Service accounts всё ещё TODO. Tests baseline **199**. Next — Phase **4**.
+
+**v2.13 (2026-07-20):** Phase **4 Discovery Done** (docs-only). Activity Feed = read той же `activity_events` (без новой таблицы / без `domain.activity` persistence). Risks = evaluate-on-read (без `risk_flags` в Phase 4); первые правила: `STALE_ACTIVITY`, `OPEN_MR_STALE`, `NO_MR`, `JIRA_ACTIVE_NO_GIT`. Tasks 4.1–4.2 — next после go-ahead. См. [architecture.md](./architecture.md), [api.md](./api.md), [decisions.md](./decisions.md).
+
+**v2.14 (2026-07-20):** Phase 4 **parameters locked** — Feed: `orphans=true` default; Risks: `STALE_ACTIVITY=3d`, `OPEN_MR_STALE=5d`, scope=`workstreams`; out of scope подтверждён (AI/Kafka/Redis/CQRS/UI/Jenkins/Release Health). Open questions закрыты. Next — **4.1**.
+
+**v2.15 (2026-07-20):** Phase **4.1 Done** — `GET /api/activity` (`api.activity` → `domain.timeline`); shared `ActivityEventMapper`; Liquibase `0008`; 208 тестов. Next — **4.2** Risks.
+
+**v2.16 (2026-07-20):** Phase **4.2 Done** — `GET /api/risks` (`api.risk` → `domain.risk`); evaluate-on-read; 217 тестов. Next — Phase **5** (Jenkins / Release Health) или Pilot.
+
+**v2.17 (2026-07-20):** Phase **4.3 Done** — минимальный React dashboard (`frontend/`: `/`, `/activity`, `/issues/:key`) + `GET /api/workstreams/progress`. Next — Phase **5** или Pilot.
+
+**v2.18 (2026-07-20):** Frontend UI локализован на русский (`labels.ts` / `format.ts`, без i18n-lib, без смены API). См. [ux.md](./ux.md) v2.3.
